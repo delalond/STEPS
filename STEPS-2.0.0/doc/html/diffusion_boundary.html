@@ -1,0 +1,533 @@
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>5. Diffusion Boundary &mdash; STEPS User Manual 2.0.0 documentation</title>
+    
+    <link rel="stylesheet" href="_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '',
+        VERSION:     '2.0.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="top" title="STEPS User Manual 2.0.0 documentation" href="index.html" />
+    <link rel="next" title="6. SBML support" href="sbml_importer.html" />
+    <link rel="prev" title="4. Simulating Diffusion" href="diffusion.html" /> 
+  </head>
+  <body>
+<div style="background-color: white; text-align: left; padding: 10px 10px 15px 15px">
+<a href="http://steps.sourceforge.net"><img src="_static/logo.png" border="0" alt="py4sci"/></a>
+</div>
+
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="sbml_importer.html" title="6. SBML support"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="diffusion.html" title="4. Simulating Diffusion"
+             accesskey="P">previous</a> |</li>
+        <li><a href="manual_index.html">STEPS User Manual 2.0.0 documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="diffusion-boundary">
+<span id="id1"></span><h1>5. Diffusion Boundary<a class="headerlink" href="#diffusion-boundary" title="Permalink to this headline">¶</a></h1>
+<p><em>The simulation script described in this chapter is available at examples/tutorial/diffusion_boundary.py</em></p>
+<p>In some systems it may be a convenient simulation feature to be able to localize certain chemical species in one particular region of a volume without diffusion to neighboring regions even if they are not separated by a physical boundary. For example, in some biological systems certain proteins may exist only in local regions and though the structural features are simplified in a model the proteins are assumed to diffuse in a local region to meet and react with each other. So it is sometimes important to restrict the diffusional space of some proteins and not the others from a biologically feasible perspective. Similarly, it may be convenient to separate a large simulation volume into a number of compartments that are not physically separated by a membrane and so are connected to other compartments by chemical diffusion. Such an approach allows for different biochemical behavior in different regions of the volume to be specified and may simplify simulation initialization and data recording considerably. In this brief chapter we&#8217;ll introduce an object termed the “Diffusion Boundary“ (<a class="reference internal" href="API_geom.html#steps.geom.DiffBoundary" title="steps.geom.DiffBoundary"><tt class="xref py py-class docutils literal"><span class="pre">steps.geom.DiffBoundary</span></tt></a>) which allows for this important simulation convenience: optional chemical diffusion between connected mesh compartments.</p>
+<p>The Diffusion Boundary of course can only be added to a mesh-based (i.e. not a well-mixed) simulation and is described by a collection of triangles. These triangles must form some or all of the connection between two (and only two) compartments, and none of the triangles may already be described as part of a “Patch“ (<a class="reference internal" href="API_geom.html#steps.geom.TmPatch" title="steps.geom.TmPatch"><tt class="xref py py-class docutils literal"><span class="pre">steps.geom.TmPatch</span></tt></a>). It is not possible for two compartments to be connected in the same area by a Patch and a Diffusion Boundary since a Patch is intended to model a membrane and a Diffusion Boundary is just some internal area within a volume that may block diffusion, and it would be unrealistic to allow surface reactions and free diffusion to occur in the same area. Once a Diffusion Boundary is in place the modeler may specify which chemical species (if any) may freely diffuse through the boundary.</p>
+<p>For the example we&#8217;ll set up a simple system to introduce the <a class="reference internal" href="API_geom.html#steps.geom.DiffBoundary" title="steps.geom.DiffBoundary"><tt class="xref py py-class docutils literal"><span class="pre">steps.geom.DiffBoundary</span></tt></a> object and expand on our mesh manipulation in previous chapters through STEPS methods provided in the Python interface. The simple examples here may of course be expanded and built on for more complex mesh manipulations in detailed, realistic simulations, though greater complexity is beyond the scope of this chapter.</p>
+<div class="section" id="modeling-solution">
+<h2>5.1. Modeling solution<a class="headerlink" href="#modeling-solution" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="organisation-of-code">
+<h3>5.1.1. Organisation of code<a class="headerlink" href="#organisation-of-code" title="Permalink to this headline">¶</a></h3>
+<p>To run our simulation we&#8217;ll, as usual, create a Python script, following a similar structure to previous chapters. Again, for clarity, we&#8217;ll show Python code as if typed at the prompt and go through the code step by step looking at some statements in detail as we go.</p>
+<p>To get started we import STEPS and outside packages as usual:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">steps.model</span> <span class="kn">as</span> <span class="nn">smodel</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">steps.geom</span> <span class="kn">as</span> <span class="nn">sgeom</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">steps.rng</span> <span class="kn">as</span> <span class="nn">srng</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">steps.solver</span> <span class="kn">as</span> <span class="nn">solvmod</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">steps.utilities.meshio</span> <span class="kn">as</span> <span class="nn">meshio</span>
+
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">numpy</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">pylab</span> <span class="kn">import</span> <span class="o">*</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="model-specification">
+<h3>5.1.2. Model specification<a class="headerlink" href="#model-specification" title="Permalink to this headline">¶</a></h3>
+<p>We&#8217;ll go straight into our function that will set up the biochemical model. Here we will create two chemical species objects, &#8216;X&#8217; and &#8216;Y&#8217;, and describe their diffusion rules. Notice that this time we use separate volume systems for the two compartments we will create, as is our option. We intend volume system &#8216;vsysA&#8217; to be added to a compartment &#8216;A&#8217; and &#8216;vsysB&#8217; to be added to compartment &#8216;B&#8217;, the reason for which will become clear as we progress:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">gen_model</span><span class="p">():</span>
+
+<span class="go">        # Create the model container object</span>
+<span class="go">        mdl = smodel.Model()</span>
+
+<span class="go">        # Create the chemical species</span>
+<span class="go">        X = smodel.Spec(&#39;X&#39;, mdl)</span>
+<span class="go">        Y = smodel.Spec(&#39;Y&#39;, mdl)</span>
+
+<span class="go">        # Create separate volume systems for compartments A and B</span>
+<span class="go">        vsysA = smodel.Volsys(&#39;vsysA&#39;, mdl)</span>
+<span class="go">        vsysB = smodel.Volsys(&#39;vsysB&#39;, mdl)</span>
+
+<span class="go">        # Describe diffusion of molecules in compartments A and B</span>
+<span class="go">        diff_X_A = smodel.Diff(&#39;diff_X_A&#39;, vsysA, X, dcst = 0.1e-9)</span>
+<span class="go">        diff_X_B = smodel.Diff(&#39;diff_X_B&#39;, vsysB, X, dcst = 0.1e-9)</span>
+<span class="go">        diff_Y_A = smodel.Diff(&#39;diff_Y_A&#39;, vsysA, Y, dcst = 0.1e-9)</span>
+<span class="go">        diff_Y_B = smodel.Diff(&#39;diff_Y_B&#39;, vsysB, Y, dcst = 0.1e-9)</span>
+
+<span class="go">        # Return the container object</span>
+<span class="go">        return mdl</span>
+</pre></div>
+</div>
+<p>Note that if our model were set up with the following code instead, diffusion would NOT be defined for species &#8216;X&#8217; in compartment &#8216;B&#8217; (if we add only volume system &#8216;B&#8217; to compartment &#8216;B&#8217; as we intend):</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="c"># Describe diffusion of molecules in compartments A and B</span>
+<span class="c"># NOTE: diffusion is not defined for species X in compartment B</span>
+<span class="n">diff_X</span> <span class="o">=</span> <span class="n">smodel</span><span class="o">.</span><span class="n">Diff</span><span class="p">(</span><span class="s">&#39;diff_X&#39;</span><span class="p">,</span> <span class="n">vsysA</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">dcst</span> <span class="o">=</span> <span class="mf">0.1e-9</span><span class="p">)</span>
+<span class="n">diff_Y_A</span> <span class="o">=</span> <span class="n">smodel</span><span class="o">.</span><span class="n">Diff</span><span class="p">(</span><span class="s">&#39;diff_Y_A&#39;</span><span class="p">,</span> <span class="n">vsysA</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="n">dcst</span> <span class="o">=</span> <span class="mf">0.1e-9</span><span class="p">)</span>
+<span class="n">diff_Y_B</span> <span class="o">=</span> <span class="n">smodel</span><span class="o">.</span><span class="n">Diff</span><span class="p">(</span><span class="s">&#39;diff_Y_B&#39;</span><span class="p">,</span> <span class="n">vsysB</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="n">dcst</span> <span class="o">=</span> <span class="mf">0.1e-9</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>This is an important point because if a species does not react or diffuse within a compartment (as is the case for &#8216;X&#8217; in compartment &#8216;B&#8217; here) it is undefined in the compartment by the solver- it does nothing in the compartment so memory and simulation time is not wasted by including the species in that compartment during simulation. For this reason if we were to later try to allow diffusion of &#8216;X&#8217; across the diffusion boundary during our simulation in this example we would receive an error message because it may not diffuse into compartment &#8216;B&#8217; since it is undefined there.</p>
+</div>
+<div class="section" id="geometry-specification">
+<h3>5.1.3. Geometry specification<a class="headerlink" href="#geometry-specification" title="Permalink to this headline">¶</a></h3>
+<p>Next we&#8217;ll define our geometry function. Because some of the operations are new we&#8217;ll look at the code in more detail:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">gen_geom</span><span class="p">():</span>
+</pre></div>
+</div>
+<p>First we&#8217;ll import our mesh, a cylinder of axial length 10 microns (on the z-axis) <a class="reference internal" href="#figure-5-1"><em>Figure 5.1</em></a>, which we have previously imported and saved in STEPS format (with method <a class="reference internal" href="API_utilities_meshio.html#steps.utilities.meshio.saveMesh" title="steps.utilities.meshio.saveMesh"><tt class="xref py py-func docutils literal"><span class="pre">steps.utilities.meshio.saveMesh()</span></tt></a>) in folder &#8216;meshes&#8217; in the current directory. Here, the object that is returned to us and stored by <tt class="docutils literal"><span class="pre">mesh</span></tt> will be a <a class="reference internal" href="API_geom.html#steps.geom.Tetmesh" title="steps.geom.Tetmesh"><tt class="xref py py-class docutils literal"><span class="pre">steps.geom.Tetmesh</span></tt></a> object, which is the zeroth element of the tuple returned by the function:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">mesh</span> <span class="o">=</span> <span class="n">meshio</span><span class="o">.</span><span class="n">loadMesh</span><span class="p">(</span><span class="s">&#39;meshes/cyl_len10_diam1&#39;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+</pre></div>
+</div>
+<div class="figure" id="figure-5-1">
+<img alt="_images/diffbound_fig1.png" src="_images/diffbound_fig1.png" />
+<p class="caption"><cite>Figure 5.1: The simple cylindrical mesh to be used for the simulation. Notice the z-axis is the longitudinal axis. We wish to split the mesh into two compartment: &#8216;A&#8217; (highlighted in yellow) and &#8216;B&#8217; (highlighted in purple) and create a “Diffusion Boundary“ at their shared surface.</cite></p>
+</div>
+<p>Now we&#8217;ll create our two compartments. We&#8217;ll split our cylinder down the middle of the z-axis creating two compartments of (approximately) equal volume. Since our cylinder is oriented on the z-axis we simply need to separate tetrahedrons by those that are below the centre point on the z-axis and those that are above.</p>
+<p>Firstly we count the number of tetrahedrons using method <a class="reference internal" href="API_geom.html#steps.geom.Tetmesh.countTets" title="steps.geom.Tetmesh.countTets"><tt class="xref py py-func docutils literal"><span class="pre">steps.geom.Tetmesh.countTets()</span></tt></a>:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">ntets</span> <span class="o">=</span> <span class="n">mesh</span><span class="o">.</span><span class="n">countTets</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>And create empty lists to group the tetrahedrons as those that belong to compartment &#8216;A&#8217; and those to &#8216;B&#8217;:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">tets_compA</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="n">tets_compB</span> <span class="o">=</span> <span class="p">[]</span>
+</pre></div>
+</div>
+<p>And similarly create empty sets to group all the triangles in compartments &#8216;A&#8217; and &#8216;B&#8217;. All tetrahedrons are comprised of 4 triangles, and we store all triangles belonging to all tetrahedrons in the compartment (in a set so as not to store more than once). The reason for doing so will become apparent soon:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">tris_compA</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+<span class="n">tris_compB</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>Next we find the bounds of the mesh, and the mid point (on the z-axis)- the point at which we want our Diffusion Boundary to appear:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">z_max</span> <span class="o">=</span> <span class="n">mesh</span><span class="o">.</span><span class="n">getBoundMax</span><span class="p">()[</span><span class="mi">2</span><span class="p">]</span>
+<span class="n">z_min</span> <span class="o">=</span> <span class="n">mesh</span><span class="o">.</span><span class="n">getBoundMin</span><span class="p">()[</span><span class="mi">2</span><span class="p">]</span>
+<span class="n">z_mid</span> <span class="o">=</span> <span class="n">z_min</span><span class="o">+</span><span class="p">(</span><span class="n">z_max</span><span class="o">-</span><span class="n">z_min</span><span class="p">)</span><span class="o">/</span><span class="mf">2.0</span>
+</pre></div>
+</div>
+<p>Now we&#8217;ll run a for loop over all tetrahedrons to sort tetrahedrons and triangles into the compartments. The criterior is that tetrahedrons with their barycenter less than the mid point on the z-axis will belong to compartment &#8216;A&#8217; and those with their barycenter greater than the mid point will belong to compartment &#8216;B&#8217;:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">ntets</span><span class="p">):</span>
+    <span class="c"># Fetch the z coordinate of the barycenter</span>
+    <span class="n">barycz</span> <span class="o">=</span> <span class="n">mesh</span><span class="o">.</span><span class="n">getTetBarycenter</span><span class="p">(</span><span class="n">t</span><span class="p">)[</span><span class="mi">2</span><span class="p">]</span>
+    <span class="c"># Fetch the triangle indices of the tetrahedron, a tuple of length 4:</span>
+    <span class="n">tris</span> <span class="o">=</span> <span class="n">mesh</span><span class="o">.</span><span class="n">getTetTriNeighb</span><span class="p">(</span><span class="n">t</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">barycz</span> <span class="o">&lt;</span> <span class="n">z_mid</span><span class="p">:</span>
+        <span class="n">tets_compA</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">t</span><span class="p">)</span>
+        <span class="n">tris_compA</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">tris</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="n">tris_compA</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">tris</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+        <span class="n">tris_compA</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">tris</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+        <span class="n">tris_compA</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">tris</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">tets_compB</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">t</span><span class="p">)</span>
+        <span class="n">tris_compB</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">tris</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="n">tris_compB</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">tris</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+        <span class="n">tris_compB</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">tris</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+        <span class="n">tris_compB</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">tris</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+</pre></div>
+</div>
+<p>With our tetrahedrons sorted in this way we can create our mesh compartments. As we have seen in the previous chapter, a <a class="reference internal" href="API_geom.html#steps.geom.TmComp" title="steps.geom.TmComp"><tt class="xref py py-class docutils literal"><span class="pre">steps.geom.TmComp</span></tt></a> requires to the constructor, in order: a unique string identifier, a reference to the parent <a class="reference internal" href="API_geom.html#steps.geom.Tetmesh" title="steps.geom.Tetmesh"><tt class="xref py py-class docutils literal"><span class="pre">steps.geom.Tetmesh</span></tt></a> container object, and all the indices of the tetrahedrons that comprise the compartment in a Python sequence such as a list or tuple:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">compA</span> <span class="o">=</span> <span class="n">sgeom</span><span class="o">.</span><span class="n">TmComp</span><span class="p">(</span><span class="s">&#39;compA&#39;</span><span class="p">,</span> <span class="n">mesh</span><span class="p">,</span> <span class="n">tets_compA</span><span class="p">)</span>
+<span class="n">compB</span> <span class="o">=</span> <span class="n">sgeom</span><span class="o">.</span><span class="n">TmComp</span><span class="p">(</span><span class="s">&#39;compB&#39;</span><span class="p">,</span> <span class="n">mesh</span><span class="p">,</span> <span class="n">tets_compB</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>And add volume system &#8216;vsysA&#8217; to compartment &#8216;A&#8217; and volume system &#8216;vsysB&#8217; to compartment &#8216;B&#8217;:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">compA</span><span class="o">.</span><span class="n">addVolsys</span><span class="p">(</span><span class="s">&#39;vsysA&#39;</span><span class="p">)</span>
+<span class="n">compB</span><span class="o">.</span><span class="n">addVolsys</span><span class="p">(</span><span class="s">&#39;vsysB&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Now comes our diffusion boundary as part of our geometry description and therefore the Diffusion Boundary class is to be found in module <a class="reference internal" href="API_geom.html#module-steps.geom" title="steps.geom"><tt class="xref py py-mod docutils literal"><span class="pre">steps.geom</span></tt></a> which we have imported with name <tt class="docutils literal"><span class="pre">sgeom</span></tt>. Recall that, to create a diffusion boundary, we must have a sequence of all the triangle indices that comprise the diffusion boundary and all of the triangles must connect the same two compartments. The reason that the user has to explicitly declare which triangles to use is that the diffusion boundary between compartments may not necessarily form the whole surface between the two compartments and may comprise a smaller area. However here we will use the entire surface between the two compartments.</p>
+<p>The way that we find the triangle indices is very straightforward- they are simply the common triangles to both compartments. We have the triangle indices of both compartments stored in Python sets, the common triangles are therefore the intersection:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">tris_DB</span> <span class="o">=</span> <span class="n">tris_compA</span><span class="o">.</span><span class="n">intersection</span><span class="p">(</span><span class="n">tris_compB</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>If this point is not very clear, consider the simple example where two tetrahedrons are connected at a surface (triangle). Lets say tetrahedron A is comprised of triangles (0,1,2,3) and tetrahedron B is comprised of triangles (0,4,5,6). That would mean that their common triangle (0) forms their connection. The common triangle could be found by finding the intersection of two sets of the triangles, that is the intersection of (0,1,2,3) and (0,4,5,6) is (0). That is what the above code does on a larger scale where the sets contain all triangles in the entire compartment and the intersection therefore gives the entire surface connection between the two compartments.</p>
+<p>Now we have to convert the set to a list (or other sequence such as a tuple or NumPy array) as this is what the diffusion boundary constructor requires:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">tris_DB</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">tris_DB</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Finally we can create the diffusion boundary between compartment &#8216;A&#8217; and compartment &#8216;B&#8217;. The object constructor looks similar to that for a mesh compartment or patch, but with some important differences. That is the constructor expects, in order: a unique string identifier, a reference to the parent <a class="reference internal" href="API_geom.html#steps.geom.Tetmesh" title="steps.geom.Tetmesh"><tt class="xref py py-class docutils literal"><span class="pre">steps.geom.Tetmesh</span></tt></a> container, and a sequence of all triangles that comprise the boundary. Note that no references to the compartments that the boundary connects are required- these are found internally and checked to be common amongst all triangles in the diffusion boundary:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">diffb</span> <span class="o">=</span> <span class="n">sgeom</span><span class="o">.</span><span class="n">DiffBoundary</span><span class="p">(</span><span class="s">&#39;diffb&#39;</span><span class="p">,</span> <span class="n">mesh</span><span class="p">,</span> <span class="n">tris_DB</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>And that is basically all we need to do create our diffusion boundary. As usual we should note the string identifier because that is what we will need to control the diffusion boundary during simulation. The technique for finding the common triangles between two compartments is a very useful technique that may be applied or adapted when creating diffusion boundaries in most STEPS simulations.</p>
+<p>We return the parent <a class="reference internal" href="API_geom.html#steps.geom.Tetmesh" title="steps.geom.Tetmesh"><tt class="xref py py-class docutils literal"><span class="pre">steps.geom.Tetmesh</span></tt></a> object, along with the lists of tetrahedrons by compartment at the end of our function body:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="k">return</span> <span class="n">mesh</span><span class="p">,</span> <span class="n">tets_compA</span><span class="p">,</span> <span class="n">tets_compB</span>
+</pre></div>
+</div>
+<p>Our entire function code is:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">gen_geom</span><span class="p">():</span>
+<span class="go">        mesh = meshio.loadMesh(&#39;meshes/cyl_len10_diam1&#39;)[0]</span>
+<span class="go">        ntets = mesh.countTets()</span>
+
+<span class="go">        tets_compA = []</span>
+<span class="go">        tets_compB = []</span>
+<span class="go">        tris_compA = set()</span>
+<span class="go">        tris_compB = set()</span>
+
+<span class="go">        z_max = mesh.getBoundMax()[2]</span>
+<span class="go">        z_min = mesh.getBoundMin()[2]</span>
+<span class="go">        z_mid = z_min+(z_max-z_min)/2.0</span>
+
+<span class="go">        for t in range(ntets):</span>
+<span class="go">            # Fetch the z coordinate of the barycenter</span>
+<span class="go">            barycz = mesh.getTetBarycenter(t)[2]</span>
+<span class="go">            # Fetch the triangle indices of the tetrahedron, which is a tuple of length 4</span>
+<span class="go">            tris = mesh.getTetTriNeighb(t)</span>
+<span class="go">            if (barycz &lt; z_mid):</span>
+<span class="go">                tets_compA.append(t)</span>
+<span class="go">                tris_compA.add(tris[0])</span>
+<span class="go">                tris_compA.add(tris[1])</span>
+<span class="go">                tris_compA.add(tris[2])</span>
+<span class="go">                tris_compA.add(tris[3])</span>
+<span class="go">            else:</span>
+<span class="go">                tets_compB.append(t)</span>
+<span class="go">                tris_compB.add(tris[0])</span>
+<span class="go">                tris_compB.add(tris[1])</span>
+<span class="go">                tris_compB.add(tris[2])</span>
+<span class="go">                tris_compB.add(tris[3])</span>
+
+<span class="go">        compA = sgeom.TmComp(&#39;compA&#39;, mesh, tets_compA)</span>
+<span class="go">        compB = sgeom.TmComp(&#39;compB&#39;, mesh, tets_compB)</span>
+<span class="go">        compA.addVolsys(&#39;vsysA&#39;)</span>
+<span class="go">        compB.addVolsys(&#39;vsysB&#39;)</span>
+
+<span class="go">        tris_DB = tris_compA.intersection(tris_compB)</span>
+<span class="go">        tris_DB = list(tris_DB)</span>
+
+<span class="go">        diffb = sgeom.DiffBoundary(&#39;diffb&#39;, mesh, tris_DB)</span>
+
+<span class="go">        return mesh, tets_compA, tets_compB</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="simulation-with-tetexact">
+<h3>5.1.4. Simulation with <tt class="docutils literal"><span class="pre">Tetexact</span></tt><a class="headerlink" href="#simulation-with-tetexact" title="Permalink to this headline">¶</a></h3>
+<p>So now we come to our example simulation run. As in the previous chapter we will create the 3 important objects required to the solver constructor, which are: a <a class="reference internal" href="API_model.html#steps.model.Model" title="steps.model.Model"><tt class="xref py py-class docutils literal"><span class="pre">steps.model.Model</span></tt></a> object (returned by our <tt class="docutils literal"><span class="pre">gen_model</span></tt> function), a <a class="reference internal" href="API_geom.html#steps.geom.Tetmesh" title="steps.geom.Tetmesh"><tt class="xref py py-class docutils literal"><span class="pre">steps.geom.Tetmesh</span></tt></a> object (for a mesh-based simulation; returned by our <tt class="docutils literal"><span class="pre">gen_geom</span></tt> function) and a <a class="reference internal" href="API_rng.html#steps.rng.RNG" title="steps.rng.RNG"><tt class="xref py py-class docutils literal"><span class="pre">steps.rng.RNG</span></tt></a> object that we will create.
+We generate our <a class="reference internal" href="API_model.html#steps.model.Model" title="steps.model.Model"><tt class="xref py py-class docutils literal"><span class="pre">steps.model.Model</span></tt></a> container object with a call to function <tt class="docutils literal"><span class="pre">gen_geom</span></tt> and store in variable <tt class="docutils literal"><span class="pre">mdl</span></tt>:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="n">mdl</span> <span class="o">=</span> <span class="n">gen_model</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>Note that, as well as the <a class="reference internal" href="API_geom.html#steps.geom.Tetmesh" title="steps.geom.Tetmesh"><tt class="xref py py-class docutils literal"><span class="pre">steps.geom.Tetmesh</span></tt></a> container object, the <tt class="docutils literal"><span class="pre">gen_geom</span></tt> function also returns the indices of the terahedrons for both compartments, which we will store in variables <tt class="docutils literal"><span class="pre">tets_compA</span></tt> and <tt class="docutils literal"><span class="pre">tets_compB</span></tt>:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="n">mesh</span><span class="p">,</span> <span class="n">tets_compA</span><span class="p">,</span> <span class="n">tets_compB</span> <span class="o">=</span> <span class="n">gen_geom</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>As in previous chapters, create our random number generator and initialise with some seed value:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="n">rng</span> <span class="o">=</span> <span class="n">srng</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="s">&#39;mt19937&#39;</span><span class="p">,</span> <span class="mi">256</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rng</span><span class="o">.</span><span class="n">initialize</span><span class="p">(</span><span class="mi">654</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>And create our solver object, using <a class="reference internal" href="API_solver.html#steps.solver.Tetexact" title="steps.solver.Tetexact"><tt class="xref py py-class docutils literal"><span class="pre">steps.solver.Tetexact</span></tt></a> for a mesh-based diffusion simulation with the usual object references to the solver constructor, which to recall are (in order): a <a class="reference internal" href="API_model.html#steps.model.Model" title="steps.model.Model"><tt class="xref py py-class docutils literal"><span class="pre">steps.model.Model</span></tt></a> object, a <a class="reference internal" href="API_geom.html#steps.geom.Tetmesh" title="steps.geom.Tetmesh"><tt class="xref py py-class docutils literal"><span class="pre">steps.geom.Tetmesh</span></tt></a> object, and a <a class="reference internal" href="API_rng.html#steps.rng.RNG" title="steps.rng.RNG"><tt class="xref py py-class docutils literal"><span class="pre">steps.rng.RNG</span></tt></a> object:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="n">sim</span> <span class="o">=</span> <span class="n">solvmod</span><span class="o">.</span><span class="n">Tetexact</span><span class="p">(</span><span class="n">mdl</span><span class="p">,</span> <span class="n">mesh</span><span class="p">,</span> <span class="n">rng</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">sim</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>Now to create the data structures for running our simulation and storing data. There are many ways to achieve our aims here, but we will follow a pattern set by previous chapters which is first to create a NumPy array for “time-points“ to run the simulation, and find how many “time-points“ we have:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="n">tpnts</span> <span class="o">=</span> <span class="n">numpy</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.101</span><span class="p">,</span> <span class="mf">0.001</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ntpnts</span> <span class="o">=</span> <span class="n">tpnts</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>And now create our structures for storing data, again NumPy arrays, but this time of a size to record data from every tetrahedron in the mesh. We record how many tetrahedrons there are by using method <tt class="docutils literal"><span class="pre">countTets</span></tt> on our mesh object (<a class="reference internal" href="API_geom.html#steps.geom.Tetmesh.countTets" title="steps.geom.Tetmesh.countTets"><tt class="xref py py-func docutils literal"><span class="pre">steps.geom.Tetmesh.countTets()</span></tt></a>). We also separate our results arrays, one to record from compartment &#8216;A&#8217; and one for compartment &#8216;B&#8217;:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="n">ntets</span> <span class="o">=</span> <span class="n">mesh</span><span class="o">.</span><span class="n">countTets</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">resX</span> <span class="o">=</span> <span class="n">numpy</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">ntpnts</span><span class="p">,</span> <span class="n">ntets</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">resY</span> <span class="o">=</span> <span class="n">numpy</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">ntpnts</span><span class="p">,</span> <span class="n">ntets</span><span class="p">))</span>
+</pre></div>
+</div>
+<p>Next, let&#8217;s assume we wish to inject our molecules at the two ends of the cylinders, that is the points at which our z-axis is at a minimum and and a maximum. From creating our mesh (or finding out through methods <tt class="docutils literal"><span class="pre">getBoundMax</span></tt> and <tt class="docutils literal"><span class="pre">getBoundMin</span></tt> on our <a class="reference internal" href="API_geom.html#steps.geom.Tetmesh" title="steps.geom.Tetmesh"><tt class="xref py py-class docutils literal"><span class="pre">steps.geom.Tetmesh</span></tt></a> object) we know that our boundaries are at z = -5 microns and +5 microns. To find the tetrahedrons at the centre points of the two boundaries (i.e. at x=0 and y=0) we use <a class="reference internal" href="API_geom.html#steps.geom.Tetmesh" title="steps.geom.Tetmesh"><tt class="xref py py-class docutils literal"><span class="pre">steps.geom.Tetmesh</span></tt></a> method <tt class="docutils literal"><span class="pre">findTetByPoint</span></tt>, which will return the index of the tetrahedron that encompasses any point given in 3D cartesian coordinates as a Python sequence. We give points slightly inside the boundary so as to be sure that our point is inside the mesh (the method will return -1 if not):</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="n">tetX</span> <span class="o">=</span> <span class="n">mesh</span><span class="o">.</span><span class="n">findTetByPoint</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mf">4.99e-6</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">tetY</span> <span class="o">=</span> <span class="n">mesh</span><span class="o">.</span><span class="n">findTetByPoint</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mf">4.99e-6</span><span class="p">])</span>
+</pre></div>
+</div>
+<p>Let&#8217;s set our initial conditions by injecting 1000 molecules of species &#8216;X&#8217; into the lower Z boundary tetrahedron (which will be contained in compartment &#8216;A&#8217;) and 500 molecules of species &#8216;Y&#8217; into the upper z boundary tetrahedron (which will be contained in compartment &#8216;B&#8217;) <a class="footnote-reference" href="#f1" id="id2">[1]</a>:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="n">sim</span><span class="o">.</span><span class="n">setTetCount</span><span class="p">(</span><span class="n">tetX</span> <span class="p">,</span> <span class="s">&#39;X&#39;</span><span class="p">,</span> <span class="mi">1000</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">sim</span><span class="o">.</span><span class="n">setTetCount</span><span class="p">(</span><span class="n">tetY</span><span class="p">,</span> <span class="s">&#39;Y&#39;</span><span class="p">,</span> <span class="mi">500</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Now for the main focus of this chapter, which is to allow diffusion between the compartments joined by a Diffusion Boundary. During our geometry construction we already created our <a class="reference internal" href="API_geom.html#steps.geom.DiffBoundary" title="steps.geom.DiffBoundary"><tt class="xref py py-class docutils literal"><span class="pre">steps.geom.DiffBoundary</span></tt></a> object (named rather unimaginatively &#8216;diffb&#8217;) which will be included in the simulation, with the default behaviour to block diffusion between compartment &#8216;A&#8217; and &#8216;B&#8217; completely for all molecules. We now wish to allow diffusion of species &#8216;Y&#8217; through the boundary which we achieve with one simple solver method call. Importantly, we would be unable to activate diffusion through the boundary for species &#8216;X&#8217;; this is because &#8216;X&#8217; is undefined in compartment &#8216;B&#8217; since it does not appear in any reaction or diffusion rules there.</p>
+<p>To activate diffusion through the boundary we call the rather wordy <a class="reference internal" href="API_solver.html#steps.solver.Tetexact" title="steps.solver.Tetexact"><tt class="xref py py-class docutils literal"><span class="pre">steps.solver.Tetexact</span></tt></a> solver method <tt class="docutils literal"><span class="pre">setDiffBoundaryDiffusionActive</span></tt> (<a class="reference internal" href="API_solver.html#steps.solver.Tetexact.setDiffBoundaryDiffusionActive" title="steps.solver.Tetexact.setDiffBoundaryDiffusionActive"><tt class="xref py py-func docutils literal"><span class="pre">steps.solver.Tetexact.setDiffBoundaryDiffusionActive()</span></tt></a>), with 3 arguments to the function; the string identifier of the diffusion boundary (&#8216;diffb&#8217;), the string identifier of the species (&#8216;Y&#8217;) and a bool as to whether diffusion through the boundary is active or not (<tt class="docutils literal"><span class="pre">True</span></tt>):</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="n">sim</span><span class="o">.</span><span class="n">setDiffBoundaryDiffusionActive</span><span class="p">(</span><span class="s">&#39;diffb&#39;</span><span class="p">,</span> <span class="s">&#39;Y&#39;</span><span class="p">,</span> <span class="bp">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>And that is all we need to do to activate diffusion of species &#8216;Y&#8217; through the diffusion boundary &#8216;diffb&#8217; and therefore allow diffusion of &#8216;Y&#8217; between compartments &#8216;A&#8217; and &#8216;B&#8217;. To inactivate diffusion (which is incidentally the default behaviour for all species) we would call the same function with boolean <tt class="docutils literal"><span class="pre">False</span></tt>.</p>
+<p>So now a simple <tt class="docutils literal"><span class="pre">for</span></tt> loop to run our simulation. We have already constructed our NumPy arrays for this purpose: <tt class="docutils literal"><span class="pre">tpnts</span></tt> stores the times that we run our simulation and collect our data for (we chose 1ms increments up to 100ms) and <tt class="docutils literal"><span class="pre">ntpnts</span></tt> stores how many of these &#8216;time-points&#8217; there are, which is 101 (including time=0):</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">ntpnts</span><span class="p">):</span>
+<span class="go">        sim.run(tpnts[i])</span>
+</pre></div>
+</div>
+<p>At every time-point we will collect our data, here recording the number of molecules of &#8216;X&#8217; and &#8216;Y&#8217; in every tetrahedron in the mesh:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">ntets</span><span class="p">):</span>
+    <span class="n">resX</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">sim</span><span class="o">.</span><span class="n">getTetCount</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="s">&#39;X&#39;</span><span class="p">)</span>
+    <span class="n">resY</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">sim</span><span class="o">.</span><span class="n">getTetCount</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="s">&#39;Y&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Our complete for loop is:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">ntpnts</span><span class="p">):</span>
+<span class="go">        sim.run(tpnts[i])</span>
+<span class="go">        for k in range(ntets):</span>
+<span class="go">            resX[i, k] = sim.getTetCount(k, &#39;X&#39;)</span>
+<span class="go">            resY[i, k] = sim.getTetCount(k, &#39;Y&#39;)</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="plotting-simulation-output">
+<h3>5.1.5. Plotting simulation output<a class="headerlink" href="#plotting-simulation-output" title="Permalink to this headline">¶</a></h3>
+<p>Having run our simulation it now comes to visualizing and analyzing the output of the simulation. One way to do this is to plot the data, once again using the plotting capability from Matplotlib.</p>
+<p>Let&#8217;s assume we want a spatial plot- distance on the z-axis vs concentration- but don&#8217;t want to plot every tetrahedron individually. In other words we want to split the cylinder into bins with equal width on the z-axis. Then we record counts from a tetrahedron and add it to the bin that the tetrahedron belongs to. We could, of course, have set up structures to record data from bins before and during our simulation, but instead we will use the data that we have recorded in all individual tetrahedrons (in the code above) to read and split into bins for plotting. And that is exactly what is achieved in the following function, which won&#8217;t contain a detailed step-by-step explanation as it is not strictly STEPS code, but is included for the user to see how such tasks may be achieved. This function does use some structures defined outside of the function, such as <tt class="docutils literal"><span class="pre">tpnts</span></tt>, so would have to appear after the previous code in a Python script to work as it is:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">plot_binned</span><span class="p">(</span><span class="n">t_idx</span><span class="p">,</span> <span class="n">bin_n</span> <span class="o">=</span> <span class="mi">100</span><span class="p">):</span>
+<span class="go">        if (t_idx &gt; tpnts.size):</span>
+<span class="go">            print &quot;Time index is out of range.&quot;</span>
+<span class="go">            return</span>
+
+<span class="go">        # Create structure to record z-position of tetrahedron</span>
+<span class="go">        z_tets = numpy.zeros(ntets)</span>
+
+<span class="go">        zbound_min = mesh.getBoundMin()[2]</span>
+
+<span class="go">        # Now find the distance of the centre of the tets to the Z lower face</span>
+<span class="go">        for i in range(ntets):</span>
+<span class="go">            baryc = mesh.getTetBarycenter(i)</span>
+<span class="go">            z = baryc[2] - zbound_min</span>
+<span class="go">            # Convert to microns and save</span>
+<span class="go">            z_tets[i] = z*1.0e6</span>
+
+<span class="go">        # Find the maximum and minimum z of all tetrahedrons</span>
+<span class="go">        z_max = z_tets.max()</span>
+<span class="go">        z_min = z_tets.min()</span>
+
+<span class="go">        # Set up the bin structures, recording the individual bin volumes</span>
+<span class="go">        z_seg = (z_max-z_min)/bin_n</span>
+<span class="go">        bin_mins = numpy.zeros(bin_n+1)</span>
+<span class="go">        z_tets_binned = numpy.zeros(bin_n)</span>
+<span class="go">        bin_vols = numpy.zeros(bin_n)</span>
+
+<span class="go">        # Now sort the counts into bins for species &#39;X&#39;</span>
+<span class="go">        z = z_min</span>
+<span class="go">        for b in range(bin_n + 1):</span>
+<span class="go">            bin_mins[b] = z</span>
+<span class="go">            if (b!=bin_n): z_tets_binned[b] = z +z_seg/2.0</span>
+<span class="go">            z+=z_seg</span>
+<span class="go">        bin_counts = [None]*bin_n</span>
+<span class="go">        for i in range(bin_n): bin_counts[i] = []</span>
+<span class="go">        for i in range((resX[t_idx].size)):</span>
+<span class="go">            i_z = z_tets[i]</span>
+<span class="go">            for b in xrange(bin_n):</span>
+<span class="go">                if(i_z&gt;=bin_mins[b] and i_z&lt;bin_mins[b+1]):</span>
+<span class="go">                    bin_counts[b].append(resX[t_idx][i])</span>
+<span class="go">                    bin_vols[b]+=sim.getTetVol(i)</span>
+<span class="go">                    break</span>
+
+<span class="go">        # Convert to concentration in arbitrary units</span>
+<span class="go">        bin_concs = numpy.zeros(bin_n)</span>
+<span class="go">        for c in range(bin_n):</span>
+<span class="go">            for d in range(bin_counts[c].__len__()):</span>
+<span class="go">                bin_concs[c] += bin_counts[c][d]</span>
+<span class="go">            bin_concs[c]/=(bin_vols[c]*1.0e18)</span>
+
+<span class="go">        t = tpnts[t_idx]</span>
+
+<span class="go">        # Plot the data</span>
+<span class="go">        scatter(z_tets_binned, bin_concs, label = &#39;X&#39;, color = &#39;black&#39;)</span>
+
+<span class="go">        # Repeat the process for species &#39;Y&#39;- separate from &#39;X&#39; for clarity:</span>
+<span class="go">        z = z_min</span>
+<span class="go">        for b in range(bin_n + 1):</span>
+<span class="go">            bin_mins[b] = z</span>
+<span class="go">            if (b!=bin_n): z_tets_binned[b] = z +z_seg/2.0</span>
+<span class="go">            z+=z_seg</span>
+<span class="go">        bin_counts = [None]*bin_n</span>
+<span class="go">        for i in range(bin_n): bin_counts[i] = []</span>
+<span class="go">        for i in range((resY[t_idx].size)):</span>
+<span class="go">            i_z = z_tets[i]</span>
+<span class="go">            for b in xrange(bin_n):</span>
+<span class="go">                if(i_z&gt;=bin_mins[b] and i_z&lt;bin_mins[b+1]):</span>
+<span class="go">                    bin_counts[b].append(resY[t_idx][i])</span>
+<span class="go">                    break</span>
+<span class="go">        bin_concs = numpy.zeros(bin_n)</span>
+<span class="go">        for c in range(bin_n):</span>
+<span class="go">            for d in range(bin_counts[c].__len__()):</span>
+<span class="go">                bin_concs[c] += bin_counts[c][d]</span>
+<span class="go">            bin_concs[c]/=(bin_vols[c]*1.0e18)</span>
+
+<span class="go">        scatter(z_tets_binned, bin_concs, label = &#39;Y&#39;, color = &#39;red&#39;)</span>
+
+<span class="go">        xlabel(&#39;Z axis (microns)&#39;, fontsize=16)</span>
+<span class="go">        ylabel(&#39;Bin concentration (N/m^3)&#39;, fontsize=16)</span>
+<span class="go">        ylim(0)</span>
+<span class="go">        xlim(0, 10)</span>
+<span class="go">        legend(numpoints=1)</span>
+<span class="go">        show()</span>
+</pre></div>
+</div>
+<p>This function will plot the bin concentration of both species &#8216;X&#8217; and &#8216;Y&#8217; along the z-axis for any of our “time-points“, with the default number of bins being 100. We ran our simulation up to 100ms, which was the 100th time-point so lets plat that with call <tt class="docutils literal"><span class="pre">plot_binned(100,</span> <span class="pre">50)</span></tt> which gives the output shown in <a class="reference internal" href="#figure-5-2"><em>Figure 5.2</em></a>:</p>
+<div class="figure" id="figure-5-2">
+<img alt="_images/diffbound_fig2png.png" src="_images/diffbound_fig2png.png" style="width: 6.5in; height: 5in;" />
+<p class="caption"><cite>Figure 5.2: The binned concentrations of species &#8216;X&#8217; and &#8216;Y&#8217; are plotted at time 100ms.
+The diffusion boundary allows diffusion of species &#8216;Y&#8217; between compartments,
+but blocks the diffusion of species &#8216;X&#8217;, which is therefore contained in compartment &#8216;A&#8217; (left half of figure).</cite></p>
+</div>
+<p>The figure shows shows species &#8216;Y&#8217; diffuse from compartment B to compartment A freely, while &#8216;X&#8217; is  clearly contained in compartment &#8216;A&#8217; by the central diffusion boundary.</p>
+</div>
+<div class="section" id="simulation-visualization">
+<h3>5.1.6. Simulation Visualization<a class="headerlink" href="#simulation-visualization" title="Permalink to this headline">¶</a></h3>
+<p>Another option for simulation that we have is to use the preliminary STEPS Visual Toolkit, in module <a class="reference internal" href="API_utilities_visual.html#module-steps.utilities.visual" title="steps.utilities.visual"><tt class="xref py py-mod docutils literal"><span class="pre">steps.utilities.visual</span></tt></a>. With just two lines added to our script (one to import the <a class="reference internal" href="API_utilities_visual.html#module-steps.utilities.visual" title="steps.utilities.visual"><tt class="xref py py-mod docutils literal"><span class="pre">steps.utilities.visual</span></tt></a> module and another to open the Visual Frontend) we can visualize our simulation.
+We need to import our module, and open the Visual Frontend window by creating a <a class="reference internal" href="API_utilities_visual.html#steps.utilities.visual.GUISim" title="steps.utilities.visual.GUISim"><tt class="xref py py-class docutils literal"><span class="pre">steps.utilities.visual.GUISim</span></tt></a> object <cite>after</cite> setting our initial conditions. We achieve this by adding the line:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">steps.utilities.visual</span> <span class="kn">as</span> <span class="nn">svisual</span>
+</pre></div>
+</div>
+<p>to our import statements and the line</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="n">svisual</span><span class="o">.</span><span class="n">GUISim</span><span class="p">(</span><span class="n">mdl</span><span class="p">,</span> <span class="n">mesh</span><span class="p">,</span> <span class="n">sim</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><cite>after</cite> setting our initial conditions and before any simulation loop in the Python script. Notice that the GUISim object constructor requires a <a class="reference internal" href="API_model.html#steps.model.Model" title="steps.model.Model"><tt class="xref py py-class docutils literal"><span class="pre">steps.model.Model</span></tt></a> object reference, a <a class="reference internal" href="API_geom.html#steps.geom.Tetmesh" title="steps.geom.Tetmesh"><tt class="xref py py-class docutils literal"><span class="pre">steps.geom.Tetmesh</span></tt></a> object reference and a <a class="reference internal" href="API_solver.html#steps.solver.Tetexact" title="steps.solver.Tetexact"><tt class="xref py py-class docutils literal"><span class="pre">steps.solver.Tetexact</span></tt></a> solver object reference. The visualization will be built from whatever conditions are present in the solver object.
+The simplified main body of the script for running our Visualization simulation now looks like this:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="n">mdl</span> <span class="o">=</span> <span class="n">gen_model</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">mesh</span><span class="p">,</span> <span class="n">tets_compA</span><span class="p">,</span> <span class="n">tets_compB</span> <span class="o">=</span> <span class="n">gen_geom</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rng</span> <span class="o">=</span> <span class="n">srng</span><span class="o">.</span><span class="n">create_mt19937</span><span class="p">(</span> <span class="mi">256</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rng</span><span class="o">.</span><span class="n">initialize</span><span class="p">(</span><span class="mi">654</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">sim</span> <span class="o">=</span> <span class="n">solvmod</span><span class="o">.</span><span class="n">Tetexact</span><span class="p">(</span><span class="n">mdl</span><span class="p">,</span> <span class="n">mesh</span><span class="p">,</span> <span class="n">rng</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">sim</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">tetx</span> <span class="o">=</span> <span class="n">mesh</span><span class="o">.</span><span class="n">findTetByPoint</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mf">4.99e-6</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">tety</span> <span class="o">=</span> <span class="n">mesh</span><span class="o">.</span><span class="n">findTetByPoint</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span> <span class="mf">4.99e-6</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">sim</span><span class="o">.</span><span class="n">setTetCount</span><span class="p">(</span><span class="n">tetx</span> <span class="p">,</span> <span class="s">&#39;X&#39;</span><span class="p">,</span> <span class="mi">1000</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">sim</span><span class="o">.</span><span class="n">setTetCount</span><span class="p">(</span><span class="n">tety</span><span class="p">,</span> <span class="s">&#39;Y&#39;</span><span class="p">,</span> <span class="mi">500</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">sim</span><span class="o">.</span><span class="n">setDiffBoundaryDiffusionActive</span><span class="p">(</span><span class="s">&#39;diffb&#39;</span><span class="p">,</span> <span class="s">&#39;Y&#39;</span><span class="p">,</span> <span class="bp">True</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">svisual</span><span class="o">.</span><span class="n">GUISim</span><span class="p">(</span><span class="n">mdl</span><span class="p">,</span> <span class="n">mesh</span><span class="p">,</span> <span class="n">sim</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>And the Visual Frontend is shown in <a class="reference internal" href="#figure-5-3"><em>Figure 5.3</em></a>. Clearly we can see that species &#8216;Y&#8217; (red) can freely diffuse throughout the volume, while species &#8216;X&#8217; (blue) is contained in compartment &#8216;A&#8217; by the Diffusion Boundary.</p>
+<div class="figure" id="figure-5-3">
+<img alt="_images/diffbound_fig3.png" src="_images/diffbound_fig3.png" style="width: 9.75in; height: 7.5in;" />
+<p class="caption"><cite>Figure 5.3: The STEPS Visual Frontend displaying the simulation state after running to 100ms in a finer mesh. The Diffusion Boundary in the centre of the cylinder (not visualized) does not allow diffusion of species &#8216;X&#8217; (blue) into compartment &#8216;B&#8217;, yet allows diffusion of species &#8216;Y&#8217; (red) between compartments.</cite></p>
+</div>
+<p class="rubric">Footnotes</p>
+<table class="docutils footnote" frame="void" id="f1" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label"><a class="fn-backref" href="#id2">[1]</a></td><td>Note that at this point we would be unable to inject molecules of species &#8216;X&#8217; into any tetrahedron in compartment &#8216;B&#8217; because it is undefined in that compartment; that is &#8216;X&#8217; does not appear in any reaction or diffusion rules of any of the volume systems contained in compartment &#8216;B&#8217;.</td></tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="manual_index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">5. Diffusion Boundary</a><ul>
+<li><a class="reference internal" href="#modeling-solution">5.1. Modeling solution</a><ul>
+<li><a class="reference internal" href="#organisation-of-code">5.1.1. Organisation of code</a></li>
+<li><a class="reference internal" href="#model-specification">5.1.2. Model specification</a></li>
+<li><a class="reference internal" href="#geometry-specification">5.1.3. Geometry specification</a></li>
+<li><a class="reference internal" href="#simulation-with-tetexact">5.1.4. Simulation with <tt class="docutils literal"><span class="pre">Tetexact</span></tt></a></li>
+<li><a class="reference internal" href="#plotting-simulation-output">5.1.5. Plotting simulation output</a></li>
+<li><a class="reference internal" href="#simulation-visualization">5.1.6. Simulation Visualization</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="diffusion.html"
+                        title="previous chapter">4. Simulating Diffusion</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="sbml_importer.html"
+                        title="next chapter">6. SBML support</a></p>
+  <h3>This Page</h3>
+  <ul class="this-page-menu">
+    <li><a href="_sources/diffusion_boundary.txt"
+           rel="nofollow">Show Source</a></li>
+  </ul>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="sbml_importer.html" title="6. SBML support"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="diffusion.html" title="4. Simulating Diffusion"
+             >previous</a> |</li>
+        <li><a href="manual_index.html">STEPS User Manual 2.0.0 documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2012, The STEPS Development Team.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.1.3.
+    </div>
+  </body>
+</html>

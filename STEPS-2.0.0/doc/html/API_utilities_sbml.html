@@ -1,0 +1,236 @@
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>9.7. steps.utilities.sbml &mdash; STEPS User Manual 2.0.0 documentation</title>
+    
+    <link rel="stylesheet" href="_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '',
+        VERSION:     '2.0.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="top" title="STEPS User Manual 2.0.0 documentation" href="index.html" />
+    <link rel="up" title="9. API References" href="API_ref.html" />
+    <link rel="prev" title="9.6. steps.utilities.visual" href="API_utilities_visual.html" /> 
+  </head>
+  <body>
+<div style="background-color: white; text-align: left; padding: 10px 10px 15px 15px">
+<a href="http://steps.sourceforge.net"><img src="_static/logo.png" border="0" alt="py4sci"/></a>
+</div>
+
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="API_utilities_visual.html" title="9.6. steps.utilities.visual"
+             accesskey="P">previous</a> |</li>
+        <li><a href="manual_index.html">STEPS User Manual 2.0.0 documentation</a> &raquo;</li>
+          <li><a href="API_ref.html" accesskey="U">9. API References</a> &raquo;</li> 
+      </ul>
+    </div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="module-steps.utilities.sbml">
+<span id="steps-utilities-sbml"></span><span id="api-utilities-sbml"></span><h1>9.7. steps.utilities.sbml<a class="headerlink" href="#module-steps.utilities.sbml" title="Permalink to this headline">¶</a></h1>
+<dl class="class">
+<dt id="steps.utilities.sbml.Interface">
+<em class="property">class </em><tt class="descclassname">steps.utilities.sbml.</tt><tt class="descname">Interface</tt><big>(</big><em>filename</em>, <em>timeunits_def=1.0</em>, <em>volunits_def=0.001</em>, <em>subsunits_def=1.0</em>, <em>volume_def=False</em>, <em>area_def=False</em>, <em>strict_mode=False</em><big>)</big><a class="headerlink" href="#steps.utilities.sbml.Interface" title="Permalink to this definition">¶</a></dt>
+<dd><p>The interface to the SBML importer.</p>
+<p>Construction:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">iSbml</span> <span class="o">=</span> <span class="n">steps</span><span class="o">.</span><span class="n">utilities</span><span class="o">.</span><span class="n">sbml</span><span class="o">.</span><span class="n">Interface</span><span class="p">(</span><span class="n">sbmlFile</span><span class="p">,</span> <span class="n">defvolunits_litre</span> <span class="o">=</span> <span class="bp">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Construct an SBML interface object, and optionally declare whether default volume units are
+litres rather than cubic meters.</p>
+<dl class="docutils">
+<dt>Arguments (required):</dt>
+<dd><ul class="first last simple">
+<li>string sbmlFile</li>
+</ul>
+</dd>
+<dt>Arguments (optional)</dt>
+<dd><ul class="first last simple">
+<li>float timeunits_def (default = 1.0)</li>
+<li>float volunits_def (default = 1.0e-3)</li>
+<li>float subsunits_def (default = 1.0)</li>
+<li>float volume_def (default = False)</li>
+<li>float area_def (default = False)</li>
+<li>bool strict_mode (default = False)</li>
+</ul>
+</dd>
+</dl>
+<p>The &#8216;units&#8217; arguments are a means to set the default model units and unit itself shoud relate to s.i units.
+For example: to set default model units to ms, timeunits_def = 1.0e-3. To set default model substance units to micromol, subsunits_def=1.0e-6.
+NOTE: These default units will only be used when units are not explicitly declared in the SBML file.</p>
+<p>The volume_def and area_def arguments are a way to set volume of compartments or area of patches with size 1.0 and no units,
+which are very common in SBML files. This may allow for a model to be run stochastically without modifying the file. 
+Values should be given in s.i. units, based on metres.
+For example: to set default volume to 100 femtolitre:  volume_def = 100*1.0e-15*1.0e-3</p>
+<p>strict_mode is a bool. False mean that all reactions will be allowed, True means that only fundamental reactions that can be represented in 
+the SSA without modification will be allowed, the import failing if any other types of reactions are present. The vast majority of SBML
+models include some non-fundamental reactions so setting this to True will mean that most SBML imports will fail.</p>
+<dl class="method">
+<dt id="steps.utilities.sbml.Interface.getModel">
+<tt class="descname">getModel</tt><big>(</big><big>)</big><a class="headerlink" href="#steps.utilities.sbml.Interface.getModel" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a reference to the steps.model.Model biocehmical model container object 
+created during SBML import.</p>
+<p>Syntax:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">getModel</span><span class="p">()</span>
+</pre></div>
+</div>
+<dl class="docutils">
+<dt>Arguments:</dt>
+<dd>None</dd>
+<dt>Return:</dt>
+<dd>steps.model.Model</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="steps.utilities.sbml.Interface.getGeom">
+<tt class="descname">getGeom</tt><big>(</big><big>)</big><a class="headerlink" href="#steps.utilities.sbml.Interface.getGeom" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a reference to the steps.geom.Geom geoemtry container object 
+created during SBML import.</p>
+<p>Syntax:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">getGeom</span><span class="p">()</span>
+</pre></div>
+</div>
+<dl class="docutils">
+<dt>Arguments:</dt>
+<dd>None</dd>
+<dt>Return:</dt>
+<dd>steps.geom.Geom</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="steps.utilities.sbml.Interface.setupSim">
+<tt class="descname">setupSim</tt><big>(</big><em>sim</em><big>)</big><a class="headerlink" href="#steps.utilities.sbml.Interface.setupSim" title="Permalink to this definition">¶</a></dt>
+<dd><p>Setup the simulation, initialising molecule counts, compartment volumes and 
+SBML &#8216;boundary conditions&#8221; to those specified in the SBML file, 
+which may differ from default values through mechanisms such as Initial Assignments.
+This function is NOT called internally and must be called by the user.</p>
+<p>Syntax:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">setupSim</span><span class="p">(</span><span class="n">sim</span><span class="p">)</span>
+</pre></div>
+</div>
+<dl class="docutils">
+<dt>Arguments:</dt>
+<dd>steps.solver.API sim (steps.solver.Wmdirect or steps.solver.Wmrk4 solver object)</dd>
+<dt>Return </dt>
+<dd>None</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="steps.utilities.sbml.Interface.updateSim">
+<tt class="descname">updateSim</tt><big>(</big><em>sim</em>, <em>simdt</em><big>)</big><a class="headerlink" href="#steps.utilities.sbml.Interface.updateSim" title="Permalink to this definition">¶</a></dt>
+<dd><p>Update the simulation solver state, which may impact any variables in the simulation that 
+can be altered within Rules and Events. Time since last update given as argument dt in seconds.</p>
+<p>Syntax:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">updateSim</span><span class="p">(</span><span class="n">sim</span><span class="p">,</span> <span class="n">dt</span><span class="p">)</span>
+</pre></div>
+</div>
+<dl class="docutils">
+<dt>Arguments:</dt>
+<dd><ul class="first last simple">
+<li>steps.solver.API  sim (steps.solver.Wmdirect or steps.solver.Wmrk4 solver object)</li>
+<li>float             dt</li>
+</ul>
+</dd>
+<dt>Return </dt>
+<dd>None</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="steps.utilities.sbml.Interface.reset">
+<tt class="descname">reset</tt><big>(</big><big>)</big><a class="headerlink" href="#steps.utilities.sbml.Interface.reset" title="Permalink to this definition">¶</a></dt>
+<dd><p>Resets the model to initailly imported state.
+This function basically repeats the import as that is the simplest and safest way.</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="API_utilities_visual.html"
+                        title="previous chapter">9.6. steps.utilities.visual</a></p>
+  <h3>This Page</h3>
+  <ul class="this-page-menu">
+    <li><a href="_sources/API_utilities_sbml.txt"
+           rel="nofollow">Show Source</a></li>
+  </ul>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="API_utilities_visual.html" title="9.6. steps.utilities.visual"
+             >previous</a> |</li>
+        <li><a href="manual_index.html">STEPS User Manual 2.0.0 documentation</a> &raquo;</li>
+          <li><a href="API_ref.html" >9. API References</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2012, The STEPS Development Team.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.1.3.
+    </div>
+  </body>
+</html>

@@ -1,0 +1,570 @@
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>6. SBML support &mdash; STEPS User Manual 2.0.0 documentation</title>
+    
+    <link rel="stylesheet" href="_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '',
+        VERSION:     '2.0.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="top" title="STEPS User Manual 2.0.0 documentation" href="index.html" />
+    <link rel="next" title="7. Simulating Membrane Potential" href="memb_pot.html" />
+    <link rel="prev" title="5. Diffusion Boundary" href="diffusion_boundary.html" /> 
+  </head>
+  <body>
+<div style="background-color: white; text-align: left; padding: 10px 10px 15px 15px">
+<a href="http://steps.sourceforge.net"><img src="_static/logo.png" border="0" alt="py4sci"/></a>
+</div>
+
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="memb_pot.html" title="7. Simulating Membrane Potential"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="diffusion_boundary.html" title="5. Diffusion Boundary"
+             accesskey="P">previous</a> |</li>
+        <li><a href="manual_index.html">STEPS User Manual 2.0.0 documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="sbml-support">
+<span id="sbml-importer"></span><h1>6. SBML support<a class="headerlink" href="#sbml-support" title="Permalink to this headline">¶</a></h1>
+<p><em>The simulation script described in this chapter is available at examples/tutorial/sbml_import.py</em></p>
+<p>The SBML module requires acces to <a class="reference external" href="http://sbml.org/Software/libSBML">libSBML</a> with the Python API. Please see <a class="reference internal" href="getting_started.html"><em>Getting Started</em></a>.</p>
+<div class="section" id="introduction">
+<h2>6.1. Introduction<a class="headerlink" href="#introduction" title="Permalink to this headline">¶</a></h2>
+<p>STEPS provides thorough and well-validated support for SBML <a class="footnote-reference" href="#f1" id="id1">[1]</a> in module <a class="reference internal" href="API_utilities_sbml.html#module-steps.utilities.sbml" title="steps.utilities.sbml"><tt class="xref py py-mod docutils literal"><span class="pre">steps.utilities.sbml</span></tt></a>. A lot of effort has gone into making sure STEPS supports as many SBML components as possible and, although it would be very difficult in STEPS (or in a stochastic simulator in general) to support every feature, testing has shown that STEPS can import the majority of the SBML Test Suite models and &#8216;curated&#8217; Biomodels. STEPS achieves this largely through support for MathML by representation of a MathML expression in a kind of nested Python list (whose members may be state variables that are updated during simulation) and by providing an internal function to solve the mathematics during simulation. This is crucially important because so many components of SBML require MathML support, including Function Definitions, Initial Assignments, Assignment Rules, Rate Rules, Reaction Kinetic Laws, Event Triggers, Event Assignment and more. This also means that STEPS can examine the form of a mathematical expression, which is very important for Reactions. For Reaction Kinetic Laws, STEPS breaks down the form of the mathematics and compares to what can be represented in a fundamental reaction in STEPS, providing an approximate method when the intended mathematics does not follow the intrinsic mathematics (in the deterministic limit). Any simulator that ignored the reaction mathematics in this case would simulate the model incorrectly. This point will be explained in more detail in section <a class="reference internal" href="#reaction-maths-label"><em>Reaction Kinetic Maths of unexpected form</em></a>.</p>
+</div>
+<div class="section" id="level-of-support">
+<h2>6.2. Level of support<a class="headerlink" href="#level-of-support" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="supported">
+<h3>6.2.1. Supported<a class="headerlink" href="#supported" title="Permalink to this headline">¶</a></h3>
+<p>In short, STEPS supports SBML components:</p>
+<ul class="simple">
+<li>Function Definitions</li>
+<li>Unit Definitions</li>
+<li>Compartments (3D and 2D)</li>
+<li>Species</li>
+<li>Parameters</li>
+<li>Initial Assignments</li>
+<li>Rules (Assignment and Rate)</li>
+<li>Reactions (including reversible reactions) (certain criteria apply)</li>
+<li>Events</li>
+</ul>
+<div class="section" id="reactions">
+<h4>6.2.1.1. Reactions<a class="headerlink" href="#reactions" title="Permalink to this headline">¶</a></h4>
+<p>In supporting 2D and 3D compartments STEPS can also support multi-compartment reactions. Examples are transport reactions from one volume to another, ligand-receptor binding reactions, and reactions where all reactants are embedded in a 2D surface. So STEPS supports volume-volume, volume-surface and surface-surface reactions. However if a reaction includes reactants that are in different volumes, such a reaction is not supported.</p>
+<p>STEPS places an upper limit of 4 on reaction stoichiometry, and does not support partial stoichiometry. The rules apply to all solvers, including the deterministic solver, in part because model specification comes before solver choice.</p>
+<p>One possible source of discrepancy between simulators is the treatment of a reaction with no reactant molecules present in the system. In such a case, the reaction in STEPS will never fire regardless of the reaction maths, which may not be dependent on the amount of reactant molecules. In any reaction reactants should be destroyed at the same rate as products are produced (an exception to this behaviour is if a reactant population is &#8216;clamped&#8217; to some value, which is supported in SBML and STEPS) and if there are in fact no reactant molecules and the reaction were to fire due to some maths that does not depend on the reactant population this should push reactant numbers into unphysical, negative numbers. In STEPS negative concentrations are not allowed, nor do we clamp the reactant number at zero in such a case and allow the reaction to fire, and this is a possible difference from the behaviour of some other simulators.</p>
+</div>
+</div>
+<div class="section" id="not-supported">
+<span id="not-supported-label"></span><h3>6.2.2. Not Supported<a class="headerlink" href="#not-supported" title="Permalink to this headline">¶</a></h3>
+<p>STEPS does not support Algebraic Rules nor Constraints.</p>
+<p>STEPS does not support compartment dimensions other than 3D and 2D, including &#8216;dimensionless&#8217; compartments.</p>
+<div class="section" id="reaction-kinetic-maths-of-unexpected-form">
+<span id="reaction-maths-label"></span><h4>6.2.2.1. Reaction Kinetic Maths of unexpected form<a class="headerlink" href="#reaction-kinetic-maths-of-unexpected-form" title="Permalink to this headline">¶</a></h4>
+<p>Reaction Kinetic Law maths of a form that is not expected is supported, but by an approximate method. In SBML a reaction contains a &#8216;KineticLaw&#8217; element, the mathematics of which defines the &#8216;speed&#8217; at which a reaction takes place. This &#8216;speed&#8217; can be anything- the mathematics does not have to follow any particular rules, though usually will involve reactants and modifiers in some way. Fundamental to the stochastic chemical kinetics in STEPS and similar simulators is that a reaction is governed by a single constant, often called the &#8216;stochastic chemical constant&#8217; or similar, which does not change at least between every reaction event. This means that the maths representing the &#8216;speed&#8217; of a reaction (in the deterministic limit) has a well-defined form: for example, in a simple system containing just the simple first order reaction:</p>
+<div class="math">
+<p><img src="_images/math/a634bee26c8a53c06b0d8f5938adbc1a119a3229.png" alt="A\overset{k}{\rightarrow}B"/></p>
+</div><p>The equation for the rate, or speed, of this reaction in the deterministic limit is simply the constant, k, multiplied by the number of &#8216;A&#8217; molecules available, and this is the maths that we would expect to see in SBML to be able to support this reaction in STEPS with an unchanging stochastic reaction constant. That is, if the substance units for &#8216;A&#8217; in SBML are concentration, then the number of &#8216;A&#8217; molecules is:</p>
+<div class="math">
+<p><img src="_images/math/e62b06ab578a5cbf02f451385108701ac07050cc.png" alt="A*V"/></p>
+</div><p>where <cite>V</cite> is the volume of the compartment, and the Kinetic Law maths for the &#8216;speed&#8217; of the reaction would be:</p>
+<div class="math">
+<p><img src="_images/math/c06d338416354f11c50e14bb7bde49dfd6f48c3c.png" alt="k*A*V"/></p>
+</div><p>The rule in STEPS is simple: if the kinetic law maths is of the form expected and (when represented in the STEPS stochastic simulation algorithm) results in STEPS in the deterministic limit would be equal to a differential equation solver of the reaction maths, then the reaction is imported and solved normally with the single reaction constant governing behaviour. If the Kinetic Law maths is in any different form, this effectively means that the stochastic reaction constant is in fact not constant and may change during simulation as state variables change. In this case the reaction can be represented in STEPS with an approximate method. The reaction mathematics (in the Kinetic Law element) is saved and can return the reaction speed at any point during the simulation. This speed can be used to update the reaction constant in the STEPS reaction. Such updates occur during <a class="reference internal" href="API_utilities_sbml.html#steps.utilities.sbml.Interface.updateSim" title="steps.utilities.sbml.Interface.updateSim"><tt class="xref py py-func docutils literal"><span class="pre">steps.utilities.sbml.Interface.updateSim()</span></tt></a> function call. This does mean that these reactions are not solved with the exactness of fundamental SSA reactions, but a reasonable time-step for the update can often be found that does not slow simulations unnecessarily and maintains acceptable accuracy.</p>
+<p>We should note that the above consideration is separate from changing values within the Kinetic Law maths, such as changing compartment volumes or even varying rate constants, which are supported in fundamental reactions in STEPS. Such variations are separate from the <cite>form</cite> of the maths and, in the STEPS context, assumed to vary insignificantly over a simulation step. Such varying simulation parameters may be found in Rules in SBML, which are fully supported (with the exception of Algebraic Rules).</p>
+</div>
+</div>
+<div class="section" id="sbml-test-suite">
+<h3>6.2.3. SBML Test Suite<a class="headerlink" href="#sbml-test-suite" title="Permalink to this headline">¶</a></h3>
+<p>To give an idea of the level of support for SBML in STEPS, we have run the SBML Test Suite, validating simulator output. Of the first 900 test models STEPS successfully imports 643 with results validated to the given Test Suite solution. The imports that fail can be split mostly into 3 categories, which are:</p>
+<ul class="simple">
+<li>Algebraic Rules included in model (Algebraic rules are not supported as was mentioned in <a class="reference internal" href="#not-supported-label"><em>Not Supported</em></a>.)</li>
+<li>0D and 1D compartment dimensions (compartments must be 3D or 2D for STEPS import, as mentioned in <a class="reference internal" href="#not-supported-label"><em>Not Supported</em></a>)</li>
+<li>No chemical species in the SBML model (chemical species are required for any STEPS simulation).</li>
+</ul>
+</div>
+<div class="section" id="support-for-mathml">
+<h3>6.2.4. Support for MathML<a class="headerlink" href="#support-for-mathml" title="Permalink to this headline">¶</a></h3>
+<p>We have tried to include as much MathML support as possible, largely based on what can be represented by basic types in Python and within the <tt class="docutils literal"><span class="pre">math</span></tt> module, and includes all maths in the SBML Test Suite and from a large number of the Biomodels database models. MathML support in the STEPS SBML importer currently extends to:</p>
+<ul class="simple">
+<li>relational operators: eq, neq, gt, lt, geq, leq</li>
+<li>arithmetic operators: +, -, <a href="#id2"><span class="problematic" id="id3">*</span></a>, /, power, root, abs, exp, ln, log, floor, ceiling</li>
+<li>logical operators: and, or, not</li>
+<li>trigonometric operators: sin, cos, tan, sinh, cosh, tanh, arcsin, arccos, arctan</li>
+<li>constants: pi, true, false, exponentiale</li>
+<li>other: lambda, piecewise</li>
+</ul>
+<p>and of course integer and floating-point numbers.</p>
+<p>We believe that this is a high level of support, sufficient for the vast majority of models, but if there is something that we have overlooked that a user would like supported the STEPS developers would be very happy to accept requests for building on the MathML support at <a class="reference external" href="mailto:steps&#46;dev&#37;&#52;&#48;gmail&#46;com">steps<span>&#46;</span>dev<span>&#64;</span>gmail<span>&#46;</span>com</a>.</p>
+</div>
+</div>
+<div class="section" id="other-considerations">
+<h2>6.3. Other considerations<a class="headerlink" href="#other-considerations" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="units">
+<h3>6.3.1. Units<a class="headerlink" href="#units" title="Permalink to this headline">¶</a></h3>
+<p>STEPS follows the correct rules for unit interpretation, although some cases are unclear and serves for some possible ambiguities in interpretation, perhaps the biggest source of errors for software SBML support. The potential for possible ambiguity arises from the fact that the unit attribute for all parameters and other values, such as compartment volumes, is optional.</p>
+<p>SBML models contain (optional) declaration of model units for time, volume, substance etc. Firstly STEPS reads and employs any declared model units, or assumes s.i. units for anything that is undeclared with the exception of litre for volume. This default behaviour can be altered by giving keyword arguments to the <a class="reference internal" href="API_utilities_sbml.html#steps.utilities.sbml.Interface" title="steps.utilities.sbml.Interface"><tt class="xref py py-class docutils literal"><span class="pre">steps.utilities.sbml.Interface</span></tt></a> constructor.</p>
+<p>STEPS does not support many of the units available in SBML (for example becquerel, lux, tesla etc), though these are rarely used. The supported units are the only units that appear in the vast majority of models, which are:</p>
+<ul class="simple">
+<li>dimensionless</li>
+<li>item</li>
+<li>litre</li>
+<li>metre</li>
+<li>mole</li>
+<li>second</li>
+</ul>
+</div>
+<div class="section" id="default-volume">
+<h3>6.3.2. Default volume<a class="headerlink" href="#default-volume" title="Permalink to this headline">¶</a></h3>
+<p>For many SBML models that are clearly intended for deterministic modelling compartment dimensions are often set to size 1 so as to avoid any confusion between substances and concentrations in various mathematical expressions. The default assumption would then be that the compartment&#8217;s volume is one litre, or one unit of whatever the model volume units are. However, the real size of the system becomes more important in stochastic solvers, not just in terms of simulation efficiency but also in the behaviour of the system. In fact it is not possible in STEPS to run a discreet simulation with a molecule count larger than the maximum unsigned integer for any species, and highly recommended that counts should be much lower for simulation efficiency considerations. The question is therefore what to do in STEPS to run such models stochastically. STEPS allows the user to provides a default volume in these cases, although this is not a perfect solution since many SBML models include amounts rather than concentrations and altering the volume size makes no difference at all to the number of molecules injected. This may cause inconsistencies too, for example if a model contained an event that is specified to fire when amount of species &#8216;X&#8217; is equal to 1 mole. The best way to deal with such problems is to alter the SBML file itself to run in more realistic spatial scales, which may be as simple as changing the model units of substance and volume, although the <a class="reference internal" href="API_utilities_sbml.html#steps.utilities.sbml.Interface" title="steps.utilities.sbml.Interface"><tt class="xref py py-class docutils literal"><span class="pre">steps.utilities.sbml.Interface</span></tt></a> constructor does also provide arguments for changing the default model units if not explicitly declared in the SBML file. STEPS also provides many methods for changing any state variable such as compartment volumes and species amounts either on individual objects such as the <a class="reference internal" href="API_geom.html#steps.geom.Comp" title="steps.geom.Comp"><tt class="xref py py-class docutils literal"><span class="pre">steps.geom.Comp</span></tt></a> object to alter the volume of some compartment, or even solver methods if appropriate.</p>
+<p>In models of large substance amounts and volumes, without manipulation the model may be run in the unoptimized deterministic solver (since molecules number has no baring on simulation time), and this is indeed the solver used for validation purposes.</p>
+<p>In any case, care should be taken when the geometry description in the SBML file consists of compartments of size 1 with no specified units.</p>
+</div>
+</div>
+<div class="section" id="sbml-file-import-solution">
+<h2>6.4. SBML file import solution<a class="headerlink" href="#sbml-file-import-solution" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="structure-of-code">
+<h3>6.4.1. Structure of code<a class="headerlink" href="#structure-of-code" title="Permalink to this headline">¶</a></h3>
+<p>Importing an SBML model for simulation in STEPS is very simple, and can be achieved with a minimum of just 6 lines of Python code. However, to explain in further detail some of the points mentioned previously in the chapter and to introduce other considerations we will, as usual, look at an example script that could be used to import an SBML file to STEPS, looking at the code in detail as we go. Our simple example will provide a function to import an SBML file, run the simulation in STEPS and plot results in Matplotib.</p>
+<p>As usual, we&#8217;ll start by importing our STEPS and outside modules, this time adding <tt class="docutils literal"><span class="pre">steps.utilities.sbml</span></tt> to our imports:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">steps.rng</span> <span class="kn">as</span> <span class="nn">srng</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">steps.solver</span> <span class="kn">as</span> <span class="nn">ssolver</span>
+</pre></div>
+</div>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">steps.utilities.sbml</span> <span class="kn">as</span> <span class="nn">ssbml</span>
+</pre></div>
+</div>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">numpy</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">pylab</span> <span class="kn">import</span> <span class="o">*</span>
+</pre></div>
+</div>
+<p>Now we&#8217;ll create a function to import and run the model defined in the SBML file. We&#8217;ll give the name of the SBML file as a string to the function arguments, along with some simulation parameters (the simulation end time, the data-collection time-step and number of iterations), which solver to use (our choices are <tt class="docutils literal"><span class="pre">Wmdirect</span></tt> and <tt class="docutils literal"><span class="pre">Wmrk4</span></tt>) and a dictionary of species that we wish to plot (if known) to a plot colour. We&#8217;ll also allow for the default volume units to be changed, and a value to be specified for the default volume in the model, which we will look at in more detail later:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">runSBMLmod</span><span class="p">(</span><span class="n">sbmlFile</span><span class="p">,</span> <span class="n">time_end</span><span class="p">,</span> <span class="n">time_dt</span><span class="p">,</span> <span class="n">iter_n</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="n">solver</span> <span class="o">=</span> <span class="s">&#39;Wmdirect&#39;</span><span class="p">,</span> <span class="n">specs_plot</span> <span class="o">=</span> <span class="p">{},</span> <span class="n">vol_units</span> <span class="o">=</span> <span class="mf">1.0e-3</span><span class="p">,</span> <span class="n">vol_def</span> <span class="o">=</span> <span class="bp">False</span><span class="p">):</span>
+</pre></div>
+</div>
+<p>Our intention for this function should be clear; when we call it we want it to find the SBML file, import to STEPS, run the simulation and plot the results of the chemical species that we are interested in. If we don&#8217;t specify which species to plot we want the function to plot every species in the model.</p>
+</div>
+<div class="section" id="sbml-file-import">
+<h3>6.4.2. SBML file import<a class="headerlink" href="#sbml-file-import" title="Permalink to this headline">¶</a></h3>
+<p>Within our function body, the first thing we&#8217;ll do is to read the SBML file, converting the model into STEPS components, contained in a <a class="reference internal" href="API_model.html#steps.model.Model" title="steps.model.Model"><tt class="xref py py-class docutils literal"><span class="pre">steps.model.Model</span></tt></a> object and a <a class="reference internal" href="API_geom.html#steps.geom.Geom" title="steps.geom.Geom"><tt class="xref py py-class docutils literal"><span class="pre">steps.geom.Geom</span></tt></a> object. We achieve this by creating a <a class="reference internal" href="API_utilities_sbml.html#steps.utilities.sbml.Interface" title="steps.utilities.sbml.Interface"><tt class="xref py py-class docutils literal"><span class="pre">steps.utilities.sbml.Interface</span></tt></a> object, which at a minimum only requires one argument to the object constructor, the SBML file path as a string:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">iSbml</span> <span class="o">=</span> <span class="n">ssbml</span><span class="o">.</span><span class="n">Interface</span><span class="p">(</span><span class="n">sbmlFile</span><span class="p">,</span> <span class="n">volunits_def</span> <span class="o">=</span> <span class="n">vol_units</span><span class="p">,</span> <span class="n">volume_def</span> <span class="o">=</span> <span class="n">vol_def</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The <tt class="docutils literal"><span class="pre">volunits_def</span></tt> argument requires a little more explanation. Quite often in SBML files the units for some or all components of the model remain undefined. The way that we deal with this ambiguity is to assume that if a unit is undefined it is the accepted base or derived s.i. unit (e.g. substance:mole, time:second). However, this sometimes causes problems when we come to volumes and concentrations. The s.i derived unit for volume is the cubic meter, which means that the s.i derived unit for concentration is mole per cubic meter, and reaction constants would be based on cubic meters, i.e. a second order reaction constant should have units of metres cubed per mole.second. However, this assumption does not usually match chemical kinetics convention where the base unit for volume is the litre, which can cause problems with our approach if some units are defined in the model and some are not. Therefore the <strong>default behaviour of the STEPS importer is to assume that the units for volume (and anything derived from volume such as concentration and reaction constants) in the model are litres</strong> (<tt class="docutils literal"><span class="pre">volunits_def</span> <span class="pre">=</span> <span class="pre">1.0e-3</span></tt>) <strong>unless explicitly declared not to be</strong> (for example: <tt class="docutils literal"><span class="pre">volunits_def</span> <span class="pre">=</span> <span class="pre">1.0</span></tt>). The default units can be changed to anything, though we require some base reference which is s.i. units of cubic meters. So <tt class="docutils literal"><span class="pre">volunits_def</span> <span class="pre">=</span> <span class="pre">1.0</span></tt> will set the default volume units to cubic metres, <tt class="docutils literal"><span class="pre">volunits_def</span> <span class="pre">=</span> <span class="pre">1.0e-18</span></tt> will set to femtolitres and so on. Since litres are the default unit, the second argument to the above constructor may not usually be required, though is included so that we can change it if necessary. Default units may also be declared for time and substance (area and length will be based on volume units) as described in <a class="reference internal" href="API_utilities_sbml.html#steps.utilities.sbml.Interface" title="steps.utilities.sbml.Interface"><tt class="xref py py-class docutils literal"><span class="pre">steps.utilities.sbml.Interface</span></tt></a>. Of course if all units are defined within the SBML model then the default value makes no difference, but units are often undefined at least for some components.</p>
+<p>The third argument is another volume consideration and is the way that we provide for the user to specify a default volume, given in s.i. units of cubic metres. This is a way to attempt to rescale the model to allow for stochastic modelling, any compartment with size = 1.0 and no units will be set to this default value. This is however not 100% effective if, for example, amounts are injected instead of concentrations and therefore the volume makes no difference to the number of molecules injected, or compartments are explicitly declared to be large compartments.</p>
+</div>
+<div class="section" id="biochemical-model-and-geometry-description">
+<h3>6.4.3. Biochemical model and Geometry description<a class="headerlink" href="#biochemical-model-and-geometry-description" title="Permalink to this headline">¶</a></h3>
+<p>If our import was successful we can now get information about the imported model from the <a class="reference internal" href="API_utilities_sbml.html#steps.utilities.sbml.Interface" title="steps.utilities.sbml.Interface"><tt class="xref py py-class docutils literal"><span class="pre">steps.utilities.sbml.Interface</span></tt></a> object we created. Particularly we can fetch a reference to the <a class="reference internal" href="API_model.html#steps.model.Model" title="steps.model.Model"><tt class="xref py py-class docutils literal"><span class="pre">steps.model.Model</span></tt></a> and <a class="reference internal" href="API_geom.html#steps.geom.Geom" title="steps.geom.Geom"><tt class="xref py py-class docutils literal"><span class="pre">steps.geom.Geom</span></tt></a> objects that were created during import:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">mdl</span> <span class="o">=</span> <span class="n">iSbml</span><span class="o">.</span><span class="n">getModel</span><span class="p">()</span>
+<span class="n">mesh</span> <span class="o">=</span> <span class="n">iSbml</span><span class="o">.</span><span class="n">getGeom</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>These two simple function calls form the bulk of the interface to the STEPS SBML importer. The <a class="reference internal" href="API_utilities_sbml.html#steps.utilities.sbml.Interface" title="steps.utilities.sbml.Interface"><tt class="xref py py-class docutils literal"><span class="pre">steps.utilities.sbml.Interface</span></tt></a> object contains a lot of information about the imported model, but we don&#8217;t need to provide many new interface methods to access that information. The reason for this is simple- the STEPS objects themselves contain all the information we need and we can call their methods to find out information about the model or to tweak the conditions before simulation. For example, if we wanted to access a list of reactions we simply first call method <tt class="docutils literal"><span class="pre">getAllVolsyss()</span></tt> on our <a class="reference internal" href="API_model.html#steps.model.Model" title="steps.model.Model"><tt class="xref py py-class docutils literal"><span class="pre">steps.model.Model</span></tt></a> container object (<a class="reference internal" href="API_model.html#steps.model.Model.getAllVolsyss" title="steps.model.Model.getAllVolsyss"><tt class="xref py py-func docutils literal"><span class="pre">steps.model.Model.getAllVolsyss()</span></tt></a>) to return a tuple of all volume systems in the model, then call method <tt class="docutils literal"><span class="pre">getAllReacs()</span></tt> on each of our <a class="reference internal" href="API_model.html#steps.model.Volsys" title="steps.model.Volsys"><tt class="xref py py-class docutils literal"><span class="pre">steps.model.Volsys</span></tt></a> objects (<a class="reference internal" href="API_model.html#steps.model.Volsys.getAllReacs" title="steps.model.Volsys.getAllReacs"><tt class="xref py py-func docutils literal"><span class="pre">steps.model.Volsys.getAllReacs()</span></tt></a>) to return tuples of all reactions contained in each volume system. On each <a class="reference internal" href="API_model.html#steps.model.Reac" title="steps.model.Reac"><tt class="xref py py-class docutils literal"><span class="pre">steps.model.Reac</span></tt></a> object we may then access it&#8217;s methods to find information about or even alter the reaction stoichiometry, rate constant etc should we so wish to.</p>
+<p>Let&#8217;s look at an example of utilising the methods within the STEPS objects to find out some information that we want for our simulation, though this is not actually part of the the interface to the SBML importer. When importing an SBML model we might not know what chemical species are present in the system, nor to which compartment they belong, so lets create a dictionary of compartment IDs to a list of all all species (by ID) that reside in each compartment (recall that a species may only be present in one compartment in SBML). We&#8217;ll also update a dictionary of all species to plot if that was absent from our function constructor (argument <tt class="docutils literal"><span class="pre">specs_plot</span></tt>).</p>
+<p>First we create an empty dictionary to map compartment ID to species IDs, and also a boolean to see if the function received any instructions about which species to plot:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">comp_specs</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="k">if</span> <span class="ow">not</span> <span class="n">specs_plot</span><span class="p">:</span> <span class="n">got_sp</span> <span class="o">=</span> <span class="bp">False</span>
+<span class="k">else</span><span class="p">:</span> <span class="n">got_sp</span> <span class="o">=</span> <span class="bp">True</span>
+</pre></div>
+</div>
+<p>Now we run a for loop over all compartments in the model, by using <a class="reference internal" href="API_geom.html#steps.geom.Geom" title="steps.geom.Geom"><tt class="xref py py-class docutils literal"><span class="pre">steps.geom.Geom</span></tt></a> method <tt class="docutils literal"><span class="pre">getAllComps</span></tt> (<a class="reference internal" href="API_geom.html#steps.geom.Geom.getAllComps" title="steps.geom.Geom.getAllComps"><tt class="xref py py-func docutils literal"><span class="pre">steps.geom.Geom.getAllComps()</span></tt></a>) which will return a tuple of all <a class="reference internal" href="API_geom.html#steps.geom.Comp" title="steps.geom.Comp"><tt class="xref py py-class docutils literal"><span class="pre">steps.geom.Comp</span></tt></a> objects representing the compartments in the model by reference, find the ID of the compartment with <a class="reference internal" href="API_geom.html#steps.geom.Comp" title="steps.geom.Comp"><tt class="xref py py-class docutils literal"><span class="pre">steps.geom.Comp</span></tt></a> method <tt class="docutils literal"><span class="pre">getID</span></tt> (<a class="reference internal" href="API_geom.html#steps.geom.Comp.getID" title="steps.geom.Comp.getID"><tt class="xref py py-func docutils literal"><span class="pre">steps.geom.Comp.getID()</span></tt></a>), and for each compartment create an empty list which we will later fill with species IDs:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="k">for</span> <span class="n">comp</span> <span class="ow">in</span> <span class="n">mesh</span><span class="o">.</span><span class="n">getAllComps</span><span class="p">():</span>
+    <span class="n">comp_specs</span><span class="p">[</span><span class="n">comp</span><span class="o">.</span><span class="n">getID</span><span class="p">()]</span> <span class="o">=</span> <span class="p">[]</span>
+</pre></div>
+</div>
+<p>Next we fetch all the volume systems in the compartment. Recall that a compartment in STEPS stores volume systems by strings and not object references since the two belong in separate namespaces:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">volsys_strings</span> <span class="o">=</span> <span class="n">comp</span><span class="o">.</span><span class="n">getVolsys</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>Now we loop over each volume system (string) in the compartment and fetch an object reference using <a class="reference internal" href="API_model.html#steps.model.Model" title="steps.model.Model"><tt class="xref py py-class docutils literal"><span class="pre">steps.model.Model</span></tt></a> method <tt class="docutils literal"><span class="pre">getVolsys</span></tt> (<a class="reference internal" href="API_model.html#steps.model.Model.getVolsys" title="steps.model.Model.getVolsys"><tt class="xref py py-func docutils literal"><span class="pre">steps.model.Model.getVolsys()</span></tt></a>), and when we have the volume system object reference we can find a tuple of all the species contained in all the reaction and diffusion rules in that volume system with <a class="reference internal" href="API_model.html#steps.model.Volsys" title="steps.model.Volsys"><tt class="xref py py-class docutils literal"><span class="pre">steps.model.Volsys</span></tt></a> method <tt class="docutils literal"><span class="pre">getAllSpecs</span></tt> (<a class="reference internal" href="API_model.html#steps.model.Volsys.getAllSpecs" title="steps.model.Volsys.getAllSpecs"><tt class="xref py py-func docutils literal"><span class="pre">steps.model.Volsys.getAllSpecs()</span></tt></a>):</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="k">for</span> <span class="n">vsys_str</span> <span class="ow">in</span> <span class="n">volsys_strings</span><span class="p">:</span>
+    <span class="n">vsys</span> <span class="o">=</span> <span class="n">mdl</span><span class="o">.</span><span class="n">getVolsys</span><span class="p">(</span><span class="n">vsys_str</span><span class="p">)</span>
+    <span class="n">specs</span> <span class="o">=</span> <span class="n">vsys</span><span class="o">.</span><span class="n">getAllSpecs</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>And now finally, still within the volume system loop, loop over the species adding the ID to our dictionary, and also adding to our plotting dictionary if none was given to our constructor (and therefore the default behaviour if we received no instructions will be to plot all species in the model):</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="n">specs</span><span class="p">:</span>
+    <span class="n">comp_specs</span><span class="p">[</span><span class="n">comp</span><span class="o">.</span><span class="n">getID</span><span class="p">()]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">getID</span><span class="p">())</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">got_sp</span> <span class="o">==</span> <span class="bp">False</span><span class="p">):</span> <span class="n">specs_plot</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="n">spec</span><span class="o">.</span><span class="n">getID</span><span class="p">():</span><span class="s">&#39;&#39;</span><span class="p">})</span>
+</pre></div>
+</div>
+<p>If the indentation is a little confusing here is the for loop in full:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="k">for</span> <span class="n">comp</span> <span class="ow">in</span> <span class="n">mesh</span><span class="o">.</span><span class="n">getAllComps</span><span class="p">():</span>
+    <span class="n">comp_specs</span><span class="p">[</span><span class="n">comp</span><span class="o">.</span><span class="n">getID</span><span class="p">()]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">volsys_strings</span> <span class="o">=</span> <span class="n">comp</span><span class="o">.</span><span class="n">getVolsys</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">vsys_str</span> <span class="ow">in</span> <span class="n">volsys_strings</span><span class="p">:</span>
+        <span class="n">vsys</span> <span class="o">=</span> <span class="n">mdl</span><span class="o">.</span><span class="n">getVolsys</span><span class="p">(</span><span class="n">vsys_str</span><span class="p">)</span>
+        <span class="n">specs</span> <span class="o">=</span> <span class="n">vsys</span><span class="o">.</span><span class="n">getAllSpecs</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="n">specs</span><span class="p">:</span>
+            <span class="n">comp_specs</span><span class="p">[</span><span class="n">comp</span><span class="o">.</span><span class="n">getID</span><span class="p">()]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">getID</span><span class="p">())</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">got_sp</span> <span class="o">==</span> <span class="bp">False</span><span class="p">):</span> <span class="n">specs_plot</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="n">spec</span><span class="o">.</span><span class="n">getID</span><span class="p">():</span><span class="s">&#39;&#39;</span><span class="p">})</span>
+</pre></div>
+</div>
+<p>Finding out what chemical species are in the model and in which compartment is a common simulation requirement and is chosen as an example here to demonstrate why no extra methods are necessary in the STEPS SBML importer to get this information that was parsed from the SBML file- all the information in present in the created STEPS objects themselves, which we can access with <a class="reference internal" href="API_utilities_sbml.html#steps.utilities.sbml.Interface" title="steps.utilities.sbml.Interface"><tt class="xref py py-class docutils literal"><span class="pre">steps.utilities.sbml.Interface</span></tt></a> methods <a class="reference internal" href="API_utilities_sbml.html#steps.utilities.sbml.Interface.getModel" title="steps.utilities.sbml.Interface.getModel"><tt class="xref py py-func docutils literal"><span class="pre">steps.utilities.sbml.Interface.getModel()</span></tt></a> and <a class="reference internal" href="API_utilities_sbml.html#steps.utilities.sbml.Interface.getGeom" title="steps.utilities.sbml.Interface.getGeom"><tt class="xref py py-func docutils literal"><span class="pre">steps.utilities.sbml.Interface.getGeom()</span></tt></a>.</p>
+<p>We move on to simply sorting our species IDs, since it may be a little tidier to do so, and also find out the total number of chemical species in the model. Knowing how many there are allows us to set up our structures for recording data:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">comp_specs_n</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="k">for</span> <span class="n">comp</span> <span class="ow">in</span> <span class="n">comp_specs</span><span class="p">:</span>
+    <span class="n">comp_specs</span><span class="p">[</span><span class="n">comp</span><span class="p">]</span><span class="o">.</span><span class="n">sort</span><span class="p">()</span>
+    <span class="n">comp_specs_n</span> <span class="o">+=</span> <span class="nb">len</span><span class="p">(</span><span class="n">comp_specs</span><span class="p">[</span><span class="n">comp</span><span class="p">])</span>
+</pre></div>
+</div>
+<p>We set up our data structures much as in previous chapters. There is occasionally some discrepancy with the length of Numpy arrays and it is sometimes necessary to resize the array if filled to and including the last time point, so we&#8217;ll do that here:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">time_pnts</span> <span class="o">=</span> <span class="n">numpy</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">time_end</span><span class="p">,</span> <span class="n">time_dt</span><span class="p">)</span>
+<span class="n">points_n</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="nb">round</span><span class="p">(</span><span class="n">time_end</span><span class="o">/</span><span class="n">time_dt</span><span class="p">))</span>
+<span class="k">if</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">time_pnts</span><span class="p">)</span>  <span class="o">==</span> <span class="p">(</span><span class="n">points_n</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)):</span> <span class="n">time_pnts</span> <span class="o">=</span> <span class="n">numpy</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">time_pnts</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">time_pnts</span><span class="p">)</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>And our usual data structure for recording data. Our first dimension is the number of iterations to run the simulation (an argument to the main function with default value 1), the second dimension is the total time-points, and the 3rd dimension is all the species in all the compartments in the system. That means that for every simulation run we will record the concentration of all species in the model at every time-point, though this is of course not always necessary:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">res</span> <span class="o">=</span> <span class="n">numpy</span><span class="o">.</span><span class="n">zeros</span><span class="p">([</span><span class="n">iter_n</span><span class="p">,</span> <span class="n">points_n</span><span class="p">,</span> <span class="n">comp_specs_n</span><span class="p">])</span>
+</pre></div>
+</div>
+<p>Not forgetting that we have to create our random number generator as usual, and present it with some seed value:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">r</span> <span class="o">=</span> <span class="n">srng</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="s">&#39;mt19937&#39;</span><span class="p">,</span> <span class="mi">256</span><span class="p">)</span>
+<span class="n">r</span><span class="o">.</span><span class="n">initialize</span><span class="p">(</span><span class="mi">7233</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="simulation-with-well-mixed-solver">
+<h3>6.4.4. Simulation with well-mixed solver<a class="headerlink" href="#simulation-with-well-mixed-solver" title="Permalink to this headline">¶</a></h3>
+<p>Now we can create our solver object. Although STEPS is designed with stochastic simulation in mind, there is an unoptimized deterministic solver which may be a better choice for some SBML models, particularly when species substance units are amounts in the molar range giving very large numbers of molecules:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="k">if</span> <span class="p">(</span><span class="n">solver</span> <span class="o">==</span> <span class="s">&#39;Wmdirect&#39;</span><span class="p">):</span>
+    <span class="n">sim</span> <span class="o">=</span> <span class="n">ssolver</span><span class="o">.</span><span class="n">Wmdirect</span><span class="p">(</span><span class="n">mdl</span><span class="p">,</span> <span class="n">mesh</span><span class="p">,</span> <span class="n">r</span><span class="p">)</span>
+<span class="k">elif</span> <span class="p">(</span><span class="n">solver</span> <span class="o">==</span> <span class="s">&#39;Wmrk4&#39;</span><span class="p">):</span>
+    <span class="n">sim</span> <span class="o">=</span> <span class="n">ssolver</span><span class="o">.</span><span class="n">Wmrk4</span><span class="p">(</span><span class="n">mdl</span><span class="p">,</span> <span class="n">mesh</span><span class="p">,</span> <span class="n">r</span><span class="p">)</span>
+    <span class="n">sim</span><span class="o">.</span><span class="n">setDT</span><span class="p">(</span><span class="mf">0.0001</span><span class="p">)</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="k">raise</span> <span class="ne">NameError</span><span class="p">(</span><span class="s">&quot;Unsupported solver. SBML importer accepts well-mixed solvers &#39;Wmrk4&#39; and &#39;Wmdirect&#39;&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>And we are ready to run our simulation. First loop over our simulation iterations and reset our simulation object each time. We also need to reset our interface object, because state variables will be changed with every iteration:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="k">for</span> <span class="n">it</span> <span class="ow">in</span> <span class="nb">range</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">iter_n</span><span class="p">):</span>
+    <span class="n">sim</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+    <span class="n">iSbml</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>Now comes an important method for the STEPS SBML importer, which is the <a class="reference internal" href="API_utilities_sbml.html#steps.utilities.sbml.Interface" title="steps.utilities.sbml.Interface"><tt class="xref py py-class docutils literal"><span class="pre">steps.utilities.sbml.Interface</span></tt></a> method <tt class="docutils literal"><span class="pre">setupSim</span></tt> (<a class="reference internal" href="API_utilities_sbml.html#steps.utilities.sbml.Interface.setupSim" title="steps.utilities.sbml.Interface.setupSim"><tt class="xref py py-func docutils literal"><span class="pre">steps.utilities.sbml.Interface.setupSim()</span></tt></a>). We give this function a reference to our simulation object and the function will set all our initial conditions, which includes of course the initial values for all components in the model, but also takes into account changes that can be made in Initial Assignments and Assignment rules (i.e. an Initial Assignment might change a compartment volume, species concentration, reaction rate constant etc before simulation):</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">iSbml</span><span class="o">.</span><span class="n">setupSim</span><span class="p">(</span><span class="n">sim</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>We have now set up our initial conditions (and now we could use solver methods to find any information we wanted to about those conditions) and so we come to running the simulation, which we do by accessing a time-point from our numpy array and record species concentrations, much as is previous chapters:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="k">for</span> <span class="n">tp</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">points_n</span><span class="p">):</span>
+    <span class="n">sim</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">time_pnts</span><span class="p">[</span><span class="n">tp</span><span class="p">])</span>
+    <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">for</span> <span class="n">comp</span> <span class="ow">in</span> <span class="n">comp_specs</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="n">comp_specs</span><span class="p">[</span><span class="n">comp</span><span class="p">]:</span>
+            <span class="n">res</span><span class="p">[</span><span class="n">it</span><span class="p">,</span> <span class="n">tp</span><span class="p">,</span> <span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">sim</span><span class="o">.</span><span class="n">getCompConc</span><span class="p">(</span><span class="n">comp</span><span class="p">,</span> <span class="n">spec</span><span class="p">)</span>
+            <span class="n">i</span><span class="o">+=</span><span class="mi">1</span>
+</pre></div>
+</div>
+<p>But before exiting the loop there is one more very important thing to do, and that is to call <a class="reference internal" href="API_utilities_sbml.html#steps.utilities.sbml.Interface" title="steps.utilities.sbml.Interface"><tt class="xref py py-class docutils literal"><span class="pre">steps.utilities.sbml.Interface</span></tt></a> method <tt class="docutils literal"><span class="pre">updateSim</span></tt> (<a class="reference internal" href="API_utilities_sbml.html#steps.utilities.sbml.Interface.updateSim" title="steps.utilities.sbml.Interface.updateSim"><tt class="xref py py-func docutils literal"><span class="pre">steps.utilities.sbml.Interface.updateSim()</span></tt></a>). This function call is vital for correct SBML import in STEPS- it will update anything in the model which is not contained within a fundamental chemical reaction (imported from SBML reactions), which include Rules and Events and also approximate reactions as described in <a class="reference internal" href="#reaction-maths-label"><em>Reaction Kinetic Maths of unexpected form</em></a>. A Rule may alter just about anything in the model, including species numbers, compartment volumes, reaction rate constants etc and an Event may also alter a number of things in the model when the trigger condition switches from False to True (for a full explanation please refer to SBML documentation). Both Rules and Events are supported in STEPS and well-validated, though both may only be checked and updated at a simulation time-point. This is due to simulator structure and also stochastic chemical kinetics assumptions, namely that such parameters are constant between each reaction event. It is important that we can assume that any such changing parameter values vary only very slightly during a simulation time-step, which we achieve by keeping time-steps small; though at what dt we can say that parameters changes are small enough not to cause errors will vary from model to model. We could even go as accurate as updating the parameters after every reaction event (using solver method <tt class="docutils literal"><span class="pre">sim.step()</span></tt> instead of <tt class="docutils literal"><span class="pre">sim.run()</span></tt> to stop the simulation after every single reaction event) for as much accuracy as possible, though we may find that this is usually too slowing and doesn&#8217;t appreciably change results from a larger, fixed time-step.</p>
+<p>We update the simulation parameters. To the <a class="reference internal" href="API_utilities_sbml.html#steps.utilities.sbml.Interface" title="steps.utilities.sbml.Interface"><tt class="xref py py-class docutils literal"><span class="pre">steps.utilities.sbml.Interface</span></tt></a> method <tt class="docutils literal"><span class="pre">updateSim</span></tt> (<a class="reference internal" href="API_utilities_sbml.html#steps.utilities.sbml.Interface.updateSim" title="steps.utilities.sbml.Interface.updateSim"><tt class="xref py py-func docutils literal"><span class="pre">steps.utilities.sbml.Interface.updateSim()</span></tt></a>) we give two arguments: the first is a reference to the solver object (which allows for the method to update simulation parameters) and the second argument is simply a number telling the function how long we ran the simulation for since the last update:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">iSbml</span><span class="o">.</span><span class="n">updateSim</span><span class="p">(</span><span class="n">sim</span><span class="p">,</span> <span class="n">time_dt</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Just to be clear, our full simulation loop is then simply:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="k">for</span> <span class="n">tp</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">points_n</span><span class="p">):</span>
+    <span class="n">sim</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">time_pnts</span><span class="p">[</span><span class="n">tp</span><span class="p">])</span>
+    <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">for</span> <span class="n">comp</span> <span class="ow">in</span> <span class="n">comp_specs</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="n">comp_specs</span><span class="p">[</span><span class="n">comp</span><span class="p">]:</span>
+            <span class="n">res</span><span class="p">[</span><span class="n">it</span><span class="p">,</span> <span class="n">tp</span><span class="p">,</span> <span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">sim</span><span class="o">.</span><span class="n">getCompConc</span><span class="p">(</span><span class="n">comp</span><span class="p">,</span> <span class="n">spec</span><span class="p">)</span>
+            <span class="n">i</span><span class="o">+=</span><span class="mi">1</span>
+    <span class="n">iSbml</span><span class="o">.</span><span class="n">updateSim</span><span class="p">(</span><span class="n">sim</span><span class="p">,</span> <span class="n">time_dt</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Finally, we find our mean behavior and plot, much as in previous chapters so this will not be explained in detail:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">mean_res</span> <span class="o">=</span> <span class="n">numpy</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">res</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+<span class="n">i</span><span class="o">=</span><span class="mi">0</span>
+<span class="k">for</span> <span class="n">comp</span> <span class="ow">in</span> <span class="n">comp_specs</span><span class="p">:</span>
+    <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="n">comp_specs</span><span class="p">[</span><span class="n">comp</span><span class="p">]:</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">spec</span> <span class="ow">in</span> <span class="n">specs_plot</span><span class="p">):</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">specs_plot</span><span class="p">[</span><span class="n">spec</span><span class="p">]):</span> <span class="n">plot</span><span class="p">(</span><span class="n">time_pnts</span><span class="p">,</span> <span class="n">mean_res</span><span class="p">[:,</span><span class="n">i</span><span class="p">],</span> <span class="n">label</span> <span class="o">=</span> <span class="n">spec</span><span class="o">+</span> <span class="s">&quot;, &quot;</span><span class="o">+</span> <span class="n">comp</span><span class="p">,</span> <span class="n">color</span> <span class="o">=</span> <span class="n">specs_plot</span><span class="p">[</span><span class="n">spec</span><span class="p">])</span>
+            <span class="k">else</span><span class="p">:</span> <span class="n">plot</span><span class="p">(</span><span class="n">time_pnts</span><span class="p">,</span> <span class="n">mean_res</span><span class="p">[:,</span><span class="n">i</span><span class="p">],</span> <span class="n">label</span> <span class="o">=</span> <span class="n">spec</span><span class="o">+</span> <span class="s">&quot;, &quot;</span><span class="o">+</span> <span class="n">comp</span><span class="p">)</span>
+        <span class="n">i</span><span class="o">+=</span><span class="mi">1</span>
+<span class="n">legend</span><span class="p">(</span><span class="n">loc</span> <span class="o">=</span> <span class="s">&#39;best&#39;</span><span class="p">,</span> <span class="n">numpoints</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">xlabel</span><span class="p">(</span><span class="s">&#39;Time (s)&#39;</span><span class="p">)</span>
+<span class="n">ylabel</span><span class="p">(</span><span class="s">&#39;Conc (M)&#39;</span><span class="p">)</span>
+<span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="complete-code">
+<h3>6.4.5. Complete code<a class="headerlink" href="#complete-code" title="Permalink to this headline">¶</a></h3>
+<p>For clarity, our uninterrupted code is:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">steps.rng</span> <span class="kn">as</span> <span class="nn">srng</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">steps.solver</span> <span class="kn">as</span> <span class="nn">ssolver</span>
+</pre></div>
+</div>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">steps.utilities.sbml</span> <span class="kn">as</span> <span class="nn">ssbml</span>
+</pre></div>
+</div>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">numpy</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">pylab</span> <span class="kn">import</span> <span class="o">*</span>
+</pre></div>
+</div>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">runSBMLmod</span><span class="p">(</span><span class="n">sbmlFile</span><span class="p">,</span> <span class="n">time_end</span><span class="p">,</span> <span class="n">time_dt</span><span class="p">,</span> <span class="n">iter_n</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="n">solver</span> <span class="o">=</span> <span class="s">&#39;Wmdirect&#39;</span><span class="p">,</span> <span class="n">specs_plot</span> <span class="o">=</span> <span class="p">{},</span> <span class="n">vol_units</span> <span class="o">=</span> <span class="mf">1.0e-3</span><span class="p">,</span> <span class="n">vol_def</span> <span class="o">=</span> <span class="bp">False</span><span class="p">):</span>
+<span class="go">        iSbml = ssbml.Interface(sbmlFile, volunits_def = vol_units, volume_def = vol_def)</span>
+<span class="go">        mdl = iSbml.getModel()</span>
+<span class="go">        mesh = iSbml.getGeom()</span>
+<span class="go">        comp_specs = {}</span>
+<span class="go">        if not specs_plot: got_sp = False</span>
+<span class="go">        else: got_sp = True</span>
+<span class="go">        for comp in mesh.getAllComps():</span>
+<span class="go">            comp_specs[comp.getID()] = []</span>
+<span class="go">            volsys_strings = comp.getVolsys()</span>
+<span class="go">            for vsys_str in volsys_strings:</span>
+<span class="go">                vsys = mdl.getVolsys(vsys_str)</span>
+<span class="go">                specs = vsys.getAllSpecs()</span>
+<span class="go">                for spec in specs:</span>
+<span class="go">                    comp_specs[comp.getID()].append(spec.getID())</span>
+<span class="go">                    if (got_sp == False): specs_plot.update({spec.getID():&#39;&#39;})</span>
+<span class="go">        comp_specs_n = 0</span>
+<span class="go">        for comp in comp_specs:</span>
+<span class="go">            comp_specs[comp].sort()</span>
+<span class="go">            comp_specs_n += len(comp_specs[comp])</span>
+<span class="go">        time_pnts = numpy.arange(0.0, time_end, time_dt)</span>
+<span class="go">        points_n = int(round(time_end/time_dt))</span>
+<span class="go">        if (len(time_pnts)  == (points_n + 1)): time_pnts = numpy.delete(time_pnts, len(time_pnts)-1)</span>
+<span class="go">        res = numpy.zeros([iter_n, points_n, comp_specs_n])</span>
+<span class="go">        r = srng.create(&#39;mt19937&#39;, 256)</span>
+<span class="go">        r.initialize(7233)</span>
+<span class="go">        if (solver == &#39;Wmdirect&#39;):</span>
+<span class="go">            sim = ssolver.Wmdirect(mdl, mesh, r)</span>
+<span class="go">        elif (solver == &#39;Wmrk4&#39;):</span>
+<span class="go">            sim = ssolver.Wmrk4(mdl, mesh, r)</span>
+<span class="go">            sim.setDT(0.0001)</span>
+<span class="go">        else:</span>
+<span class="go">            raise NameError(&quot;Unsupported solver. SBML importer accepts well-mixed solvers &#39;Wmrk4&#39; and &#39;Wmdirect&#39;&quot;)</span>
+<span class="go">        for it in range (0, iter_n):</span>
+<span class="go">            sim.reset()</span>
+<span class="go">            iSbml.reset()</span>
+<span class="go">            iSbml.setupSim(sim)</span>
+<span class="go">            for tp in range(0, points_n):</span>
+<span class="go">                sim.run(time_pnts[tp])</span>
+<span class="go">                i = 0</span>
+<span class="go">                for comp in comp_specs:</span>
+<span class="go">                    for spec in comp_specs[comp]:</span>
+<span class="go">                        res[it, tp, i] = sim.getCompConc(comp, spec)</span>
+<span class="go">                        i+=1</span>
+<span class="go">                iSbml.updateSim(sim, time_dt)</span>
+<span class="go">        mean_res = numpy.mean(res, 0)</span>
+<span class="go">        i=0</span>
+<span class="go">        for comp in comp_specs:</span>
+<span class="go">            for spec in comp_specs[comp]:</span>
+<span class="go">                if (spec in specs_plot):</span>
+<span class="go">                    if (specs_plot[spec]): plot(time_pnts, mean_res[:,i], label = spec+ &quot;, &quot;+ comp, color = specs_plot[spec])</span>
+<span class="go">                    else: plot(time_pnts, mean_res[:,i], label = spec+ &quot;, &quot;+ comp)</span>
+<span class="go">                i+=1</span>
+<span class="go">        legend(loc = &#39;best&#39;, numpoints=1)</span>
+<span class="go">        xlabel(&#39;Time (s)&#39;)</span>
+<span class="go">        ylabel(&#39;Conc (M)&#39;)</span>
+<span class="go">        show()</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="sbml-interface-methods">
+<h3>6.4.6. SBML Interface methods<a class="headerlink" href="#sbml-interface-methods" title="Permalink to this headline">¶</a></h3>
+<p>Our important SBML interface calls, which should be used in all STEPS SBML imports were:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="c"># Create the interface object, assuming default volume units to be litre.</span>
+<span class="n">iSbml</span> <span class="o">=</span> <span class="n">ssbml</span><span class="o">.</span><span class="n">Interface</span><span class="p">(</span><span class="n">sbmlFile</span><span class="p">,</span> <span class="n">volunits_def</span> <span class="o">=</span> <span class="n">vol_units</span><span class="p">,</span> <span class="n">volume_def</span> <span class="o">=</span> <span class="n">vol_def</span><span class="p">)</span>
+
+<span class="c"># Fetch a reference to the created steps.model.Model container object</span>
+<span class="n">mdl</span> <span class="o">=</span> <span class="n">iSbml</span><span class="o">.</span><span class="n">getModel</span><span class="p">()</span>
+
+<span class="c"># Fetch a reference to the steps.geom.Geometry container object</span>
+<span class="n">mesh</span> <span class="o">=</span> <span class="n">iSbml</span><span class="o">.</span><span class="n">getGeom</span><span class="p">()</span>
+
+<span class="c"># Reset the SBML interface object:</span>
+<span class="n">iSbml</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+
+<span class="c"># Set up the initial conditions</span>
+<span class="n">iSbml</span><span class="o">.</span><span class="n">setupSim</span><span class="p">(</span><span class="n">sim</span><span class="p">)</span>
+
+<span class="c"># Update the parameters which may vary in Rules and Events during simulation</span>
+<span class="n">iSbml</span><span class="o">.</span><span class="n">updateSim</span><span class="p">(</span><span class="n">sim</span><span class="p">,</span> <span class="n">time_dt</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="example-import-function-usage">
+<h3>6.4.7. Example import function usage<a class="headerlink" href="#example-import-function-usage" title="Permalink to this headline">¶</a></h3>
+<p>As an example use of our function, lets import a model which we downloaded from the BioModels database <a class="footnote-reference" href="#f2" id="id4">[2]</a> (model #98 <a class="footnote-reference" href="#f3" id="id5">[3]</a>) (a model which contains both exact and approximate reactions) in to the same directory, running the simulation in solver &#8216;Wmrk4&#8217; for 10 seconds, collecting data and updating the sim every 0.01 seconds with function call:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="n">runSBMLmod</span><span class="p">(</span><span class="s">&#39;BIOMD0000000098.xml&#39;</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mf">0.001</span><span class="p">,</span> <span class="n">solver</span><span class="o">=</span><span class="s">&#39;Wmrk4&#39;</span><span class="p">,</span><span class="n">specs_plot</span><span class="o">=</span><span class="p">{</span><span class="s">&#39;Y&#39;</span><span class="p">:</span><span class="s">&#39;blue&#39;</span><span class="p">,</span> <span class="s">&#39;Z&#39;</span><span class="p">:</span><span class="s">&#39;red&#39;</span><span class="p">})</span>
+</pre></div>
+</div>
+<p>We used the deterministic solver for this model since the amounts of the chemical species are in the micromolar range and the simple unaltered geometry description means that compartments will be given a default volume of 1 litre. <a class="reference internal" href="#figure-6-1"><em>Figure 6.1</em></a> shows the simulation result obtained from MathSBML <a class="footnote-reference" href="#f4" id="id6">[4]</a>, compared to the above function call producing the results in STEPS shown in <a class="reference internal" href="#figure-6-2"><em>Figure 6.2</em></a>. Although axis labels do not appear on the SBML figure substance units are micromolar, and time units are undefined and so assumed to be seconds in STEPS.</p>
+<div class="figure" id="figure-6-1">
+<img alt="_images/sbml_fig1.jpg" src="_images/sbml_fig1.jpg" style="width: 6.5in; height: 5in;" />
+<p class="caption"><cite>Figure 6.1: Published simulation of the model.</cite></p>
+</div>
+<div class="figure" id="figure-6-2">
+<img alt="_images/sbml_fig2.png" src="_images/sbml_fig2.png" style="width: 6.5in; height: 5in;" />
+<p class="caption"><cite>Figure 6.2: STEPS simulation produced with the code from this chapter.</cite></p>
+</div>
+<p>Because this model contains concentration injections, the simple geometry description (both compartments in the model are size 1 with no units defined) is suitable for alteration for a stochastic simulation by only changing the default volume assumption. That is we can tell STEPS what to do with a &#8216;default volume&#8217; in the model- one of size 1 with no specified units. We alter the default volume with keyword argument <tt class="docutils literal"><span class="pre">volume_def</span></tt> to the <a class="reference internal" href="API_utilities_sbml.html#steps.utilities.sbml.Interface" title="steps.utilities.sbml.Interface"><tt class="xref py py-class docutils literal"><span class="pre">steps.utilities.sbml.Interface</span></tt></a> constructor, which will be set to whatever value we supply to the runSBMLmod function as argument <tt class="docutils literal"><span class="pre">vol_def</span></tt>. The <tt class="docutils literal"><span class="pre">volume_def</span></tt> argument value should be given in s.i. units of cubic metres, so if we wanted to set the default compartment volumes to one femtolitre we would give the value 1.0e-18. We also change our choice of solver to the stochastic solver &#8216;Wmdirect&#8217;:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="n">runSBMLmod</span><span class="p">(</span><span class="s">&#39;BIOMD0000000098.xml&#39;</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mf">0.001</span><span class="p">,</span> <span class="n">solver</span><span class="o">=</span><span class="s">&#39;Wmdirect&#39;</span><span class="p">,</span><span class="n">specs_plot</span><span class="o">=</span><span class="p">{</span><span class="s">&#39;Y&#39;</span><span class="p">:</span><span class="s">&#39;blue&#39;</span><span class="p">,</span> <span class="s">&#39;Z&#39;</span><span class="p">:</span><span class="s">&#39;red&#39;</span><span class="p">},</span> <span class="n">vol_units</span> <span class="o">=</span> <span class="mf">1.0e-3</span><span class="p">,</span> <span class="n">vol_def</span> <span class="o">=</span> <span class="mf">1.0e-18</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><a class="reference internal" href="#figure-6-3"><em>Figure 6.3</em></a> shows the simulation result from the stochastic solver with compartment volumes of one femtolitre:</p>
+<div class="figure" id="figure-6-3">
+<img alt="_images/sbml_fig3.png" src="_images/sbml_fig3.png" style="width: 6.5in; height: 5in;" />
+<p class="caption"><cite>Figure 6.3: STEPS stochastic simulation in femtolitre compartments.</cite></p>
+</div>
+<p class="rubric">Footnotes</p>
+<table class="docutils footnote" frame="void" id="f1" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label"><a class="fn-backref" href="#id1">[1]</a></td><td>Hucka M, Finney A, Sauro H M, Bolouri H, Doyle J C, Kitano H, Arkin AP, Bornstein BJ, Bray D, Cornish-Bowden A, Cuellar AA, Dronov S, Gilles ED, Ginkel M, Gor V, Goryanin II, Hedley WJ, Hodgman TC, Hofmeyr J-H, Hunter PJ, Juty NS, Kasberger JL, Kremling A, Kummer U, Le Novere N, Loew LM, Lucio D, Mendes P, Minch E, Mjolsness ED, Nakayama Y, Nelson MR, Nielsen PF, Sakurada T, Schaff JC, Shapiro BE, Shimizu TS, Spence HD, Stelling J, Takahashi K, Tomita M, Wagner J, Wang J (2003) The Systems Biology Markup Language (SBML): A Medium for Representation and Exchange of Biochemical Network Models. Bioinformatics 9(4):524-531</td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="f2" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label"><a class="fn-backref" href="#id4">[2]</a></td><td>Li C, Donizelli M, Rodriguez N, Dharuri H, Endler L, Chelliah V, Li L, He E, Henry A, Stefan MI, Snoep JL, Hucka M, Le Novere N, Laibe C (2010) BioModels Database: An enhanced, curated and annotated resource for published quantitative kinetic models. BMC Syst Biol., 4:92.</td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="f3" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label"><a class="fn-backref" href="#id5">[3]</a></td><td>Goldbeter A, Dupont G, Berridge MJ (1990) Minimal model for signal-induced Ca2+ oscillations and for their frequency encoding through protein phosphorylation. Proc Natl Acad Sci USA 87(4):1461-5.</td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="f4" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label"><a class="fn-backref" href="#id6">[4]</a></td><td><a class="reference external" href="http://www.ebi.ac.uk/biomodels-main/simulation-result.do?uri=publ-model.do&amp;mid=BIOMD0000000098">http://www.ebi.ac.uk/biomodels-main/simulation-result.do?uri=publ-model.do&amp;mid=BIOMD0000000098</a></td></tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="manual_index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">6. SBML support</a><ul>
+<li><a class="reference internal" href="#introduction">6.1. Introduction</a></li>
+<li><a class="reference internal" href="#level-of-support">6.2. Level of support</a><ul>
+<li><a class="reference internal" href="#supported">6.2.1. Supported</a><ul>
+<li><a class="reference internal" href="#reactions">6.2.1.1. Reactions</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#not-supported">6.2.2. Not Supported</a><ul>
+<li><a class="reference internal" href="#reaction-kinetic-maths-of-unexpected-form">6.2.2.1. Reaction Kinetic Maths of unexpected form</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#sbml-test-suite">6.2.3. SBML Test Suite</a></li>
+<li><a class="reference internal" href="#support-for-mathml">6.2.4. Support for MathML</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#other-considerations">6.3. Other considerations</a><ul>
+<li><a class="reference internal" href="#units">6.3.1. Units</a></li>
+<li><a class="reference internal" href="#default-volume">6.3.2. Default volume</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#sbml-file-import-solution">6.4. SBML file import solution</a><ul>
+<li><a class="reference internal" href="#structure-of-code">6.4.1. Structure of code</a></li>
+<li><a class="reference internal" href="#sbml-file-import">6.4.2. SBML file import</a></li>
+<li><a class="reference internal" href="#biochemical-model-and-geometry-description">6.4.3. Biochemical model and Geometry description</a></li>
+<li><a class="reference internal" href="#simulation-with-well-mixed-solver">6.4.4. Simulation with well-mixed solver</a></li>
+<li><a class="reference internal" href="#complete-code">6.4.5. Complete code</a></li>
+<li><a class="reference internal" href="#sbml-interface-methods">6.4.6. SBML Interface methods</a></li>
+<li><a class="reference internal" href="#example-import-function-usage">6.4.7. Example import function usage</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="diffusion_boundary.html"
+                        title="previous chapter">5. Diffusion Boundary</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="memb_pot.html"
+                        title="next chapter">7. Simulating Membrane Potential</a></p>
+  <h3>This Page</h3>
+  <ul class="this-page-menu">
+    <li><a href="_sources/sbml_importer.txt"
+           rel="nofollow">Show Source</a></li>
+  </ul>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="memb_pot.html" title="7. Simulating Membrane Potential"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="diffusion_boundary.html" title="5. Diffusion Boundary"
+             >previous</a> |</li>
+        <li><a href="manual_index.html">STEPS User Manual 2.0.0 documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2012, The STEPS Development Team.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.1.3.
+    </div>
+  </body>
+</html>
